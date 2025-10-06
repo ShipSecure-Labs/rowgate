@@ -1,0 +1,23 @@
+{
+  "name": "@examples/prisma",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "schema:dev": "prisma migrate dev",
+    "schema:generate": "prisma generate",
+    "dev": "tsdown --watch --ignore-watch .turbo",
+    "build": "tsdown"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.2",
+    "prisma": "^6.16.3",
+    "tsdown": "^0.15.6",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@prisma/client": "6.16.3",
+    "@shipsecure/gatekeeper-prisma": "workspace:*"
+  }
+}
