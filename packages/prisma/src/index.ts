@@ -46,7 +46,12 @@ export function prismaAdapter<RawAdapter extends PrismaClient>(
           return () => "[GK Builder]";
 
         if (models.includes(prop as string)) {
-          return applyProxy(raw[prop as string], ctx, policy);
+          return applyProxy(
+            (raw as any)[prop as string],
+            ctx,
+            policy,
+            prop as ModelNameOf<PrismaClient>,
+          );
         }
 
         const val = Reflect.get(target, prop, receiver);
@@ -57,7 +62,6 @@ export function prismaAdapter<RawAdapter extends PrismaClient>(
           return async (...args: any[]) => {
             // args[0] is the usual Prisma args object
             console.log("→ called", prop, "with", args[0]);
-            console.log(policy, prop);
 
             // you can inject/merge policies here, e.g.:
             // args[0] = { ...args[0], where: { ...args[0].where, userId: ctx } }
@@ -68,10 +72,11 @@ export function prismaAdapter<RawAdapter extends PrismaClient>(
                 ...args[0],
                 where: {
                   ...args[0].where,
-                  ...(_table ? policy[_table](ctx) : {}),
+                  ...(_table ? policy[_table](ctx).where : {}),
                 },
               };
             }
+            console.log("-> changed to ", args[0]);
 
             const result = await val.apply(target, args);
 
