@@ -20,15 +20,15 @@ const ATTACH_METHODS = [
 ];
 
 type ModelNameOf<Client extends PrismaClient> =
-  Extract<keyof Client, string> extends infer K
-    ? K extends `$${string}` | symbol
+  Extract<keyof Client, string> extends infer K extends string
+    ? K extends `$${string}`
       ? never
       : K
     : never;
 
 export function prismaAdapter<RawAdapter extends PrismaClient>(
   prisma: RawAdapter,
-): Adapter<RawAdapter, ModelNameOf<PrismaClient>> {
+): Adapter<RawAdapter, ModelNameOf<RawAdapter>> {
   const models = Object.keys(Object(prisma)).filter(
     (key) =>
       !key.startsWith("_") && !key.startsWith("$") && key !== "constructor",
