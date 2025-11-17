@@ -6,7 +6,8 @@
   "scripts": {
     "schema:dev": "prisma migrate dev",
     "schema:generate": "prisma generate",
-    "dev": "tsdown --watch --ignore-watch .turbo",
+    "watch": "tsdown --watch --ignore-watch .turbo",
+    "dev": "node dist/index.mjs",
     "build": "tsdown"
   },
   "devDependencies": {
