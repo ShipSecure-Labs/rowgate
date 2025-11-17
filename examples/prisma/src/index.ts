@@ -16,6 +16,10 @@ const db = withGatekeeper({
 });
 
 async function main() {
+  // Clean up DB
+  await db.without().post.deleteMany({});
+  await db.without().user.deleteMany({});
+
   let user = await db.without().user.findUnique({
     where: { email: "test@example.com" },
   });
