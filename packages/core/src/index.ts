@@ -1,3 +1,6 @@
+import type { StandardSchemaV1 } from "@standard-schema/spec";
+import { standardValidate } from "./schema";
+
 export type Adapter<RawAdapter, Table extends string> = {
   name: string;
   raw: RawAdapter;
@@ -6,6 +9,7 @@ export type Adapter<RawAdapter, Table extends string> = {
     raw: RawAdapter,
     ctx: any,
     policy: Policy<Table, any>,
+    validate: (ctx: any) => Promise<any>,
   ) => RawAdapter;
 };
 
@@ -15,13 +19,14 @@ export type Policy<Table extends string, Context> = {
   };
 };
 
-export function withGatekeeper<
+export function withRowgate<
   RawAdapter,
   Table extends string,
-  Context,
+  Schema extends StandardSchemaV1,
 >(options: {
   adapter: Adapter<RawAdapter, Table>;
-  policy: Policy<Table, Context>;
+  context: Schema;
+  policy: Policy<Table, StandardSchemaV1.InferInput<Schema>>;
 }) {
   assertPolicyCoversAll(
     options.adapter.tableNames,
@@ -30,14 +35,18 @@ export function withGatekeeper<
   );
 
   return {
-    with(ctx: Context): RawAdapter {
+    with(ctx: StandardSchemaV1.InferInput<Schema>): RawAdapter {
       if (!options.adapter.applyProxy) {
         throw new Error(`Adapter ${options.adapter.name} not implemented yet`);
       }
+
       return options.adapter.applyProxy(
         options.adapter.raw,
         ctx,
         options.policy,
+        async (ctx: any) => {
+          return await standardValidate(options.context, ctx);
+        },
       );
     },
     without(): RawAdapter {
@@ -57,7 +66,7 @@ function assertPolicyCoversAll<Table extends string, Context>(
   );
   if (missing.length) {
     throw new Error(
-      `Gatekeeper(${adapterName}): policy missing entries for tables: ${missing.join(", ")}`,
+      `RowGate(${adapterName}): policy missing entries for tables: ${missing.join(", ")}`,
     );
   }
 }

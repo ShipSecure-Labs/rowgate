@@ -9,6 +9,8 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "declarationMap": true,
+    "isolatedDeclarations": true,
     "types": ["vitest/globals"]
   }
 }

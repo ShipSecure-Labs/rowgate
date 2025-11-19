@@ -1,5 +1,5 @@
-import { Adapter, Policy } from "@shipsecure/gatekeeper-core";
-export { withGatekeeper } from "@shipsecure/gatekeeper-core";
+import { Adapter, Policy } from "@rowgate/core";
+export { withRowgate } from "@rowgate/core";
 import { PrismaClient } from "@prisma/client";
 
 const ATTACH_METHODS = [
@@ -93,6 +93,6 @@ export function prismaAdapter<RawAdapter extends PrismaClient>(
     name: "prisma",
     raw: prisma,
     applyProxy: (raw, ctx, policy) => applyProxy(raw, ctx, policy, undefined),
-    tableNames: models,
+    tableNames: models as ModelNameOf<RawAdapter>[],
   };
 }

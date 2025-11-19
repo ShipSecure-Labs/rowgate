@@ -1,5 +1,5 @@
 {
-  "name": "@shipsecure/gatekeeper-core",
+  "name": "@rowgate/core",
   "version": "0.0.1",
   "type": "module",
   "main": "dist/index.cjs",
@@ -26,7 +26,7 @@
   "scripts": {
     "build": "tsdown -c tsdown.ts",
     "clean": "rimraf dist",
-    "dev": "tsdown --watch --ignore-watch .turbo -c tsdown.ts",
+    "dev": "tsdown --watch --ignore-watch .turbo",
     "lint": "eslint .",
     "test": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit"
@@ -38,6 +38,7 @@
     "vitest": "^2.0.5"
   },
   "dependencies": {
+    "@standard-schema/spec": "^1.0.0",
     "jose": "^5.9.3",
     "path-to-regexp": "^6.3.0",
     "zod": "^4.1.11"

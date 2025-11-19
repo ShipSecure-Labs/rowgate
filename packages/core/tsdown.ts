@@ -4,4 +4,6 @@ export default defineConfig({
   entry: "src/index.ts",
   sourcemap: true,
   format: ["esm", "cjs"],
+  dts: true,
+  hash: false,
 });

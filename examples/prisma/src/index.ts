@@ -1,16 +1,18 @@
 import { PrismaClient } from "@prisma/client";
-import { withGatekeeper, prismaAdapter } from "@shipsecure/gatekeeper-prisma";
+import { withRowgate, prismaAdapter } from "@rowgate/prisma";
+import { z } from "zod";
 
 const prisma = new PrismaClient();
 
-const db = withGatekeeper({
+const db = withRowgate({
+  context: z.string(),
   adapter: prismaAdapter(prisma),
   policy: {
-    post: (ctx: string) => {
-      return { where: { authorId: ctx } };
-    },
-    user: (ctx: string) => {
+    user: (ctx) => {
       return { where: { id: ctx } };
+    },
+    post: (ctx) => {
+      return { where: { author: { id: ctx } } };
     },
   },
 });
@@ -39,6 +41,7 @@ async function main() {
     },
   });
   const posts = await db.with(user.id).post.findMany({});
+
   console.log(posts);
 }
 

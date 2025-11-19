@@ -1,5 +1,5 @@
 {
-  "name": "@shipsecure/gatekeeper-prisma",
+  "name": "@rowgate/prisma",
   "version": "0.0.1",
   "type": "module",
   "main": "dist/index.cjs",
@@ -26,13 +26,13 @@
   "scripts": {
     "build": "tsdown -c tsdown.ts",
     "clean": "rimraf dist",
-    "dev": "tsdown --watch --ignore-watch .turbo -c tsdown.ts",
+    "dev": "tsdown --watch --ignore-watch .turbo",
     "lint": "eslint .",
     "test": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@shipsecure/gatekeeper-core": "workspace:*"
+    "@rowgate/core": "workspace:*"
   },
   "devDependencies": {
     "eslint": "^9.11.0",

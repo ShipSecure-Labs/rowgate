@@ -1,5 +1,5 @@
 {
-  "name": "gatekeeper-monorepo",
+  "name": "rowgate-monorepo",
   "private": true,
   "packageManager": "pnpm@9.0.0",
   "scripts": {
