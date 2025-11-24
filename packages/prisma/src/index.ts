@@ -60,23 +60,41 @@ export function prismaAdapter<RawAdapter extends PrismaClient>(
           ATTACH_METHODS.includes(prop as string)
         ) {
           return async (...args: any[]) => {
-            // args[0] is the usual Prisma args object
-            console.log("→ called", prop, "with", args[0]);
+            if (!_table) {
+              throw new Error("Table not specified");
+            }
 
-            // you can inject/merge policies here, e.g.:
-            // args[0] = { ...args[0], where: { ...args[0].where, userId: ctx } }
+            // Check if a policy exists for this table
+            const p = policy[_table](ctx).insert?.check;
+            if (!p) {
+              return await val.apply(target, args);
+            }
+
             if (
-              ["findMany", "findFirst", "findUnique"].includes(prop as string)
+              [
+                "findMany",
+                "findFirst",
+                "findUnique",
+                "sum",
+                "min",
+                "max",
+                "count",
+              ].includes(prop as string)
             ) {
               args[0] = {
                 ...args[0],
                 where: {
                   ...args[0].where,
-                  ...(_table ? policy[_table](ctx).where : {}),
+                  ...(_table ? policy[_table](ctx).select?.filter || {} : {}),
                 },
               };
             }
-            console.log("-> changed to ", args[0]);
+
+            if (["create", "createMany"].includes(prop as string)) {
+              const p = policy[_table](ctx).insert?.check;
+              if (p) {
+              }
+            }
 
             const result = await val.apply(target, args);
 

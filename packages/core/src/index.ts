@@ -15,7 +15,19 @@ export type Adapter<RawAdapter, Table extends string> = {
 
 export type Policy<Table extends string, Context> = {
   [K in Table]: (ctx: Context) => {
-    where?: Record<string, unknown>;
+    select?: {
+      filter: Record<string, unknown>;
+    };
+    insert?: {
+      check: Record<string, unknown>;
+    };
+    update?: {
+      filter: Record<string, unknown>;
+      check: Record<string, unknown>;
+    };
+    delete?: {
+      filter: Record<string, unknown>;
+    };
   };
 };
 
@@ -49,7 +61,7 @@ export function withRowgate<
         },
       );
     },
-    without(): RawAdapter {
+    system(): RawAdapter {
       return options.adapter.raw;
     },
   };

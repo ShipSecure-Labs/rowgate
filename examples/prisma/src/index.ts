@@ -8,25 +8,38 @@ const db = withRowgate({
   context: z.string(),
   adapter: prismaAdapter(prisma),
   policy: {
-    user: (ctx) => {
-      return { where: { id: ctx } };
-    },
-    post: (ctx) => {
-      return { where: { author: { id: ctx } } };
-    },
+    user: (ctx) => ({
+      select: {
+        filter: { id: ctx },
+      },
+      insert: {
+        check: { email: ctx },
+      },
+      update: {
+        filter: { id: ctx },
+        check: { email: ctx },
+      },
+      delete: { filter: { id: ctx } },
+    }),
+    post: (ctx) => ({
+      select: { filter: { author: { id: ctx } } },
+      insert: { check: { authorId: ctx } },
+      update: { filter: { author: { id: ctx } }, check: { authorId: ctx } },
+      delete: { filter: { author: { id: ctx } } },
+    }),
   },
 });
 
 async function main() {
   // Clean up DB
-  await db.without().post.deleteMany({});
-  await db.without().user.deleteMany({});
+  await db.system().post.deleteMany({});
+  await db.system().user.deleteMany({});
 
-  let user = await db.without().user.findUnique({
+  let user = await db.system().user.findUnique({
     where: { email: "test@example.com" },
   });
   if (!user) {
-    user = await db.without().user.create({
+    user = await db.system().user.create({
       data: {
         email: "test@example.com",
         name: "Test User",
@@ -37,7 +50,7 @@ async function main() {
     data: {
       title: "Test Post",
       description: "This is a test post",
-      author: { connect: { id: user.id } },
+      authorId: user.id,
     },
   });
   const posts = await db.with(user.id).post.findMany({});
