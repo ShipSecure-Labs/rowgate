@@ -1,0 +1,102 @@
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish-core:
+    # Only run if this is a core release AND it's targeting main
+    if: |
+      startsWith(github.event.release.tag_name, 'core-v') &&
+      github.event.release.target_commitish == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      NODE_VERSION: 20.x
+      PNPM_VERSION: 9.0.0
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build @rowgate/core
+        run: |
+          cd packages/core
+          if pnpm run | grep -q " build"; then
+            pnpm run build
+          else
+            echo "No build script for @rowgate/core, skipping build."
+          fi
+
+      - name: Publish @rowgate/core to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd packages/core
+          pnpm publish --access public
+
+  publish-kysely:
+    # Only run if this is a kysely release AND it's targeting main
+    if: |
+      startsWith(github.event.release.tag_name, 'kysely-v') &&
+      github.event.release.target_commitish == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      NODE_VERSION: 20.x
+      PNPM_VERSION: 9.0.0
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build @rowgate/kysely
+        run: |
+          cd packages/kysely
+          if pnpm run | grep -q " build"; then
+            pnpm run build
+          else
+            echo "No build script for @rowgate/kysely, skipping build."
+          fi
+
+      - name: Publish @rowgate/kysely to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd packages/kysely
+          pnpm publish --access public
