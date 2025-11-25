@@ -22,6 +22,11 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -29,22 +34,11 @@ jobs:
           cache: pnpm
           registry-url: "https://registry.npmjs.org"
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build @rowgate/core
-        run: |
-          cd packages/core
-          if pnpm run | grep -q " build"; then
-            pnpm run build
-          else
-            echo "No build script for @rowgate/core, skipping build."
-          fi
+        run: pnpm --filter @rowgate/core build
 
       - name: Publish @rowgate/core to npm
         env:
@@ -70,6 +64,11 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -77,22 +76,11 @@ jobs:
           cache: pnpm
           registry-url: "https://registry.npmjs.org"
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build @rowgate/kysely
-        run: |
-          cd packages/kysely
-          if pnpm run | grep -q " build"; then
-            pnpm run build
-          else
-            echo "No build script for @rowgate/kysely, skipping build."
-          fi
+        run: pnpm --filter @rowgate/kysely build
 
       - name: Publish @rowgate/kysely to npm
         env:
