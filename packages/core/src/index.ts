@@ -1,32 +1,40 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { standardValidate } from "./schema";
 
-export type Adapter<RawAdapter, Table extends string> = {
+export type Adapter<
+  RawAdapter,
+  Table extends string,
+  PolicyFilter extends Record<Table, any>,
+> = {
   name: string;
   raw: RawAdapter;
   tableNames: readonly Table[];
   applyProxy?: (
     raw: RawAdapter,
     ctx: any,
-    policy: Policy<Table, any>,
+    policy: Policy<Table, any, PolicyFilter>,
     validate: (ctx: any) => Promise<any>,
   ) => RawAdapter;
 };
 
-export type Policy<Table extends string, Context> = {
-  [K in Table]: (ctx: Context) => {
+export type Policy<
+  Table extends string,
+  Context,
+  PolicyFilter extends Record<Table, any>,
+> = {
+  [K in Table]?: (ctx: Context) => {
     select?: {
-      filter: Record<string, unknown>;
+      filter: PolicyFilter[K];
     };
     insert?: {
       check: Record<string, unknown>;
     };
     update?: {
-      filter: Record<string, unknown>;
+      filter: PolicyFilter[K];
       check: Record<string, unknown>;
     };
     delete?: {
-      filter: Record<string, unknown>;
+      filter: PolicyFilter[K];
     };
   };
 };
@@ -34,18 +42,13 @@ export type Policy<Table extends string, Context> = {
 export function withRowgate<
   RawAdapter,
   Table extends string,
+  PolicyFilter extends Record<Table, any>,
   Schema extends StandardSchemaV1,
 >(options: {
-  adapter: Adapter<RawAdapter, Table>;
+  adapter: Adapter<RawAdapter, Table, PolicyFilter>;
   context: Schema;
-  policy: Policy<Table, StandardSchemaV1.InferInput<Schema>>;
+  policy: Policy<Table, StandardSchemaV1.InferInput<Schema>, PolicyFilter>;
 }) {
-  assertPolicyCoversAll(
-    options.adapter.tableNames,
-    options.policy,
-    options.adapter.name,
-  );
-
   return {
     with(ctx: StandardSchemaV1.InferInput<Schema>): RawAdapter {
       if (!options.adapter.applyProxy) {
@@ -65,20 +68,4 @@ export function withRowgate<
       return options.adapter.raw;
     },
   };
-}
-
-/** Runtime guard to ensure all tables have policy entries */
-function assertPolicyCoversAll<Table extends string, Context>(
-  tableNames: readonly Table[],
-  policy: Policy<Table, Context>,
-  adapterName: string,
-): void {
-  const missing = tableNames.filter(
-    (t) => !(t in (policy as Record<string, unknown>)),
-  );
-  if (missing.length) {
-    throw new Error(
-      `RowGate(${adapterName}): policy missing entries for tables: ${missing.join(", ")}`,
-    );
-  }
 }

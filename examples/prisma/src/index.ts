@@ -13,11 +13,11 @@ const db = withRowgate({
         filter: { id: ctx },
       },
       insert: {
-        check: { email: ctx },
+        check: { id: ctx },
       },
       update: {
         filter: { id: ctx },
-        check: { email: ctx },
+        check: { id: ctx },
       },
       delete: { filter: { id: ctx } },
     }),
