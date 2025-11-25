@@ -76,6 +76,23 @@ async function main() {
     })
     .execute();
 
+  try {
+    await db
+      .with("2")
+      .insertInto("Post")
+      .values({
+        id: "2",
+        title: "Hello World [unauthoirzed]",
+        description: "Hello World",
+        authorId: "3",
+        updatedAt: new Date(),
+        createdAt: new Date(),
+      })
+      .execute();
+  } catch (e) {
+    console.log(e);
+  }
+
   console.log("User 1");
   await db
     .with(userId)

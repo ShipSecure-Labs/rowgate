@@ -1,5 +1,7 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { standardValidate } from "./schema";
+export * from "./errors";
+export * from "./helpers";
 
 export type Adapter<
   RawAdapter,

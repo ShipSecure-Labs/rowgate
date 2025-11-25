@@ -1,12 +1,12 @@
-import { Adapter, Policy } from "@rowgate/core";
-export { withRowgate } from "@rowgate/core";
+import { Adapter, Policy, assertPolicyCheck } from "@rowgate/core";
+export * from "@rowgate/core";
+
 import {
   Kysely,
   SelectQueryBuilder,
   InsertQueryBuilder,
   UpdateQueryBuilder,
   DeleteQueryBuilder,
-  Expression,
 } from "kysely";
 
 /**
@@ -15,15 +15,9 @@ import {
 type TableNameOf<DB> = Extract<keyof DB, string>;
 
 /**
- * Expected Rowgate<->Kysely policy shape:
- * - select.filter: (eb) => Expression<boolean>
- * - insert.check: (values, ctx) => void | boolean | Promise<void|boolean>
- * - update.check: (values, ctx) => void | boolean | Promise<void|boolean>
- * - delete.check: (ctx) => void | boolean | Promise<void|boolean>
- *
- * If your Policy type differs, adapt the few call sites below.
+ * For Kysely, the policy filter is a function that takes a query builder
+ * and returns a filtered query builder.
  */
-
 type PolicyFilter<DB> = {
   [K in TableNameOf<DB>]: (
     qb: SelectQueryBuilder<DB, K, any>,
@@ -37,51 +31,12 @@ export function kyselyAdapter<DB>(
   // At runtime Kysely doesn't expose schema, so this is type-only.
   const tableNames = [] as TableNameOf<DB>[];
 
-  const applyFilter = <TB extends TableNameOf<DB>>(
-    qb: SelectQueryBuilder<DB, TB, any>,
-    ctx: any,
-    policy: Policy<TableNameOf<DB>, any, PolicyFilter<DB>>,
-    table: TB,
-  ) => {
-    if (!policy[table]) return qb;
-    const filter = policy[table](ctx).select?.filter ?? undefined;
-
-    return filter ? filter(qb) : qb;
-  };
-
-  const wrapExecute = <T extends object>(
-    builder: T,
-    beforeExecute: (method: string, args: any[]) => Promise<void> | void,
-  ) =>
-    new Proxy(builder as any, {
-      get(target, prop, receiver) {
-        const val = Reflect.get(target, prop, receiver);
-        if (typeof val !== "function") return val;
-
-        // Intercept common execution methods to run checks
-        const EXEC_METHODS = [
-          "execute",
-          "executeTakeFirst",
-          "executeTakeFirstOrThrow",
-          "run",
-          "stream",
-        ];
-
-        if (EXEC_METHODS.includes(prop as string)) {
-          return async (...args: any[]) => {
-            await beforeExecute(prop as string, args);
-            return val.apply(target, args);
-          };
-        }
-
-        return val;
-      },
-    });
-
   const applyProxy = (
     raw: any,
     ctx: any,
     policy: Policy<TableNameOf<DB>, any, PolicyFilter<DB>>,
+    // currently unused, but kept for future async context validation
+    _validate: (ctx: any) => Promise<any>,
   ) => {
     return new Proxy(raw as any, {
       get(target, prop, receiver) {
@@ -108,13 +63,77 @@ export function kyselyAdapter<DB>(
             const tables = Array.isArray(table) ? table : [table];
 
             let qbRes = qb;
-            for (const table of tables) {
-              if (!policy[table]) continue;
-              const filter = policy[table](ctx).select?.filter ?? undefined;
-              if (filter) qbRes = filter(qbRes);
+            for (const t of tables) {
+              const tablePolicyFactory = policy[t];
+              if (!tablePolicyFactory) continue;
+
+              const p = tablePolicyFactory(ctx);
+              const filter = p.select?.filter ?? undefined;
+              if (filter) {
+                qbRes = filter(qbRes as any) as any;
+              }
             }
 
-            return applyProxy(qbRes, ctx, policy);
+            return applyProxy(qbRes, ctx, policy, _validate);
+          };
+        }
+
+        /**
+         * INSERT
+         *
+         * Enforce insert.check by intercepting `.values(...)`.
+         */
+        if (prop === "insertInto" && typeof val === "function") {
+          return <TB extends TableNameOf<DB>>(
+            table: TB,
+          ): InsertQueryBuilder<DB, TB, any> => {
+            const qb = val.call(target, table) as InsertQueryBuilder<
+              DB,
+              TB,
+              any
+            >;
+
+            const tablePolicyFactory = policy[table];
+            if (!tablePolicyFactory) {
+              // No policy for this table → just proxy normally.
+              return applyProxy(qb, ctx, policy, _validate);
+            }
+
+            const p = tablePolicyFactory(ctx);
+            const check = p.insert?.check;
+
+            if (!check) {
+              // No check defined → normal behavior.
+              return applyProxy(qb, ctx, policy, _validate);
+            }
+
+            // Wrap the builder to hook `.values(...)`
+            const wrapped = new Proxy(qb as any, {
+              get(qbTarget, qbProp, qbReceiver) {
+                const original = Reflect.get(qbTarget, qbProp, qbReceiver);
+
+                if (qbProp === "values" && typeof original === "function") {
+                  return (values: any) => {
+                    assertPolicyCheck(check, values, {
+                      table: String(table),
+                      operation: "insert",
+                      policyName: "insert",
+                    });
+
+                    const nextQb = original.call(qbTarget, values);
+                    return applyProxy(nextQb, ctx, policy, _validate);
+                  };
+                }
+
+                if (typeof original === "function") {
+                  return original.bind(qbTarget);
+                }
+
+                return original;
+              },
+            });
+
+            return wrapped as InsertQueryBuilder<DB, TB, any>;
           };
         }
 
@@ -125,7 +144,7 @@ export function kyselyAdapter<DB>(
           return <TB extends TableNameOf<DB>>(
             table: TB | TB[],
           ): DeleteQueryBuilder<DB, TB, any> => {
-            const qb = val.call(target, table) as SelectQueryBuilder<
+            const qb = val.call(target, table) as DeleteQueryBuilder<
               DB,
               TB,
               any
@@ -134,42 +153,89 @@ export function kyselyAdapter<DB>(
             const tables = Array.isArray(table) ? table : [table];
 
             let qbRes = qb;
-            for (const table of tables) {
-              if (!policy[table]) continue;
-              const filter = policy[table](ctx).delete?.filter ?? undefined;
-              if (filter) qbRes = filter(qbRes);
+            for (const t of tables) {
+              const tablePolicyFactory = policy[t];
+              if (!tablePolicyFactory) continue;
+
+              const p = tablePolicyFactory(ctx);
+              const filter = p.delete?.filter ?? undefined;
+
+              if (!filter) {
+                continue;
+              }
+
+              qbRes = filter(qbRes as any) as any;
             }
 
-            return applyProxy(qbRes, ctx, policy);
+            return applyProxy(qbRes, ctx, policy, _validate);
           };
         }
 
         /**
          * UPDATE
+         *
+         * - apply update.filter
+         * - enforce update.check by intercepting `.set(...)`
          */
-        if (
-          ["updateTable"].includes(String(prop)) &&
-          typeof val === "function"
-        ) {
+        if (prop === "updateTable" && typeof val === "function") {
           return <TB extends TableNameOf<DB>>(
-            ...args: any[]
+            table: TB,
           ): SelectQueryBuilder<DB, TB, any> => {
-            const qb = val.call(target, ...args) as SelectQueryBuilder<
+            const qb = val.call(target, table) as SelectQueryBuilder<
               DB,
               TB,
               any
             >;
 
-            const table = args[0] as TB;
+            const tablePolicyFactory = policy[table];
+            if (!tablePolicyFactory) {
+              return applyProxy(qb, ctx, policy, _validate);
+            }
 
-            if (!policy[table]) return qb;
-            const filter = policy[table](ctx).update?.filter ?? undefined;
-            return applyProxy(filter ? filter(qb) : qb, ctx, policy);
+            const p = tablePolicyFactory(ctx);
+            const filter = p.update?.filter ?? undefined;
+            const check = p.update?.check;
+
+            const filteredQb = filter ? filter(qb) : qb;
+
+            if (!check) {
+              return applyProxy(filteredQb, ctx, policy, _validate);
+            }
+
+            // Wrap to hook `.set(...)`
+            const wrapped = new Proxy(filteredQb as any, {
+              get(qbTarget, qbProp, qbReceiver) {
+                const original = Reflect.get(qbTarget, qbProp, qbReceiver);
+
+                if (qbProp === "set" && typeof original === "function") {
+                  return (values: any) => {
+                    assertPolicyCheck(check, values, {
+                      table: String(table),
+                      operation: "update",
+                      policyName: "update",
+                    });
+
+                    const nextQb = original.call(qbTarget, values);
+                    return applyProxy(nextQb, ctx, policy, _validate);
+                  };
+                }
+
+                if (typeof original === "function") {
+                  return original.bind(qbTarget);
+                }
+
+                return original;
+              },
+            });
+
+            return wrapped as SelectQueryBuilder<DB, TB, any>;
           };
         }
 
         /**
          * JOINS
+         *
+         * For now we only apply select filters on joined tables.
          */
         if (
           [
@@ -193,11 +259,18 @@ export function kyselyAdapter<DB>(
               any
             >;
 
-            const table = args[0] as TB;
+            const joinTable = args[0] as TB;
 
-            if (!policy[table]) return qb;
-            const filter = policy[table](ctx).select?.filter ?? undefined;
-            return applyProxy(filter ? filter(qb) : qb, ctx, policy);
+            const tablePolicyFactory = policy[joinTable];
+            if (!tablePolicyFactory) {
+              return applyProxy(qb, ctx, policy, _validate);
+            }
+
+            const p = tablePolicyFactory(ctx);
+            const filter = p.select?.filter ?? undefined;
+
+            const qbRes = filter ? (filter(qb as any) as any) : qb;
+            return applyProxy(qbRes, ctx, policy, _validate);
           };
         }
 
