@@ -10,6 +10,9 @@
     "LICENSE",
     "README.md"
   ],
+  "author": "Simon Koeck <simon@koeck.dev>",
+  "repository": "shipsecure-labs/rowgate",
+  "homepage": "https://rowgate.com/docs",
   "exports": {
     ".": {
       "import": {
