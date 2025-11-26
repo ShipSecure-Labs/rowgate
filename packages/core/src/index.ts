@@ -26,17 +26,17 @@ export type Policy<
 > = {
   [K in Table]?: (ctx: Context) => {
     select?: {
-      filter: PolicyFilter[K];
+      filter?: PolicyFilter[K];
     };
     insert?: {
-      check: Record<string, unknown>;
+      check?: Record<string, unknown>;
     };
     update?: {
-      filter: PolicyFilter[K];
-      check: Record<string, unknown>;
+      filter?: PolicyFilter[K];
+      check?: Record<string, unknown>;
     };
     delete?: {
-      filter: PolicyFilter[K];
+      filter?: PolicyFilter[K];
     };
   };
 };
@@ -52,7 +52,7 @@ export function withRowgate<
   policy: Policy<Table, StandardSchemaV1.InferInput<Schema>, PolicyFilter>;
 }) {
   return {
-    with(ctx: StandardSchemaV1.InferInput<Schema>): RawAdapter {
+    gate(ctx: StandardSchemaV1.InferInput<Schema>): RawAdapter {
       if (!options.adapter.applyProxy) {
         throw new Error(`Adapter ${options.adapter.name} not implemented yet`);
       }
@@ -66,7 +66,7 @@ export function withRowgate<
         },
       );
     },
-    system(): RawAdapter {
+    none(): RawAdapter {
       return options.adapter.raw;
     },
   };
