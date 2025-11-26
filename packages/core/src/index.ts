@@ -1,12 +1,12 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { standardValidate } from "./schema";
 export * from "./errors";
-export * from "./helpers";
 
 export type Adapter<
   RawAdapter,
   Table extends string,
   PolicyFilter extends Record<Table, any>,
+  PolicyCheck extends Record<Table, any>,
 > = {
   name: string;
   raw: RawAdapter;
@@ -14,7 +14,7 @@ export type Adapter<
   applyProxy?: (
     raw: RawAdapter,
     ctx: any,
-    policy: Policy<Table, any, PolicyFilter>,
+    policy: Policy<Table, any, PolicyFilter, PolicyCheck>,
     validate: (ctx: any) => Promise<any>,
   ) => RawAdapter;
 };
@@ -23,17 +23,18 @@ export type Policy<
   Table extends string,
   Context,
   PolicyFilter extends Record<Table, any>,
+  PolicyCheck extends Record<Table, any>,
 > = {
   [K in Table]?: (ctx: Context) => {
     select?: {
       filter?: PolicyFilter[K];
     };
     insert?: {
-      check?: Record<string, unknown>;
+      check?: PolicyCheck[K];
     };
     update?: {
       filter?: PolicyFilter[K];
-      check?: Record<string, unknown>;
+      check?: PolicyCheck[K];
     };
     delete?: {
       filter?: PolicyFilter[K];
@@ -45,14 +46,20 @@ export function withRowgate<
   RawAdapter,
   Table extends string,
   PolicyFilter extends Record<Table, any>,
+  PolicyCheck extends Record<Table, any>,
   Schema extends StandardSchemaV1,
 >(options: {
-  adapter: Adapter<RawAdapter, Table, PolicyFilter>;
+  adapter: Adapter<RawAdapter, Table, PolicyFilter, PolicyCheck>;
   context: Schema;
-  policy: Policy<Table, StandardSchemaV1.InferInput<Schema>, PolicyFilter>;
+  policy: Policy<
+    Table,
+    StandardSchemaV1.InferInput<Schema>,
+    PolicyFilter,
+    PolicyCheck
+  >;
 }) {
   return {
-    gate(ctx: StandardSchemaV1.InferInput<Schema>): RawAdapter {
+    gated(ctx: StandardSchemaV1.InferInput<Schema>): RawAdapter {
       if (!options.adapter.applyProxy) {
         throw new Error(`Adapter ${options.adapter.name} not implemented yet`);
       }
@@ -66,7 +73,7 @@ export function withRowgate<
         },
       );
     },
-    none(): RawAdapter {
+    ungated(): RawAdapter {
       return options.adapter.raw;
     },
   };

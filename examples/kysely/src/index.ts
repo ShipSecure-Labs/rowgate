@@ -13,11 +13,15 @@ const db = withRowgate({
   policy: {
     Post: (ctx) => ({
       select: { filter: (qb) => qb.where("Post.authorId", "=", ctx) },
-      insert: { check: { authorId: ctx } },
+      insert: {
+        check: async (_, row) => {
+          return row.authorId == ctx;
+        },
+      },
       update: {
         filter: (qb) => qb.where("Post.authorId", "=", ctx),
-        check: {
-          authorId: ctx,
+        check: async (_, row) => {
+          return row.authorId == ctx;
         },
       },
       delete: { filter: (qb) => qb.where("Post.authorId", "=", ctx) },
@@ -27,11 +31,11 @@ const db = withRowgate({
 
 async function main() {
   // Clean up DB
-  await db.system().deleteFrom("Post").execute();
-  await db.system().deleteFrom("User").execute();
+  await db.ungated().deleteFrom("Post").execute();
+  await db.ungated().deleteFrom("User").execute();
 
   await db
-    .system()
+    .ungated()
     .insertInto("User")
     .values({
       id: "1",
@@ -39,7 +43,7 @@ async function main() {
     })
     .execute();
   await db
-    .system()
+    .ungated()
     .insertInto("User")
     .values({
       id: "2",
@@ -47,12 +51,12 @@ async function main() {
     })
     .execute();
 
-  console.log("Inserted user");
+  console.log("Inserted users");
 
   const userId = "1";
 
   await db
-    .with("1")
+    .gated("1")
     .insertInto("Post")
     .values({
       id: "1",
@@ -64,7 +68,7 @@ async function main() {
     })
     .execute();
   await db
-    .with("2")
+    .gated("2")
     .insertInto("Post")
     .values({
       id: "2",
@@ -78,10 +82,10 @@ async function main() {
 
   try {
     await db
-      .with("2")
+      .gated("2")
       .insertInto("Post")
       .values({
-        id: "2",
+        id: "3",
         title: "Hello World [unauthoirzed]",
         description: "Hello World",
         authorId: "3",
@@ -95,21 +99,21 @@ async function main() {
 
   console.log("User 1");
   await db
-    .with(userId)
+    .gated(userId)
     .updateTable("Post")
     .set({
       description: "Hello World [updated]",
     })
     .execute();
   const posts = await db
-    .with(userId)
+    .gated(userId)
     .selectFrom(["Post"])
     .innerJoin("User", "Post.authorId", "User.id")
     .select(["Post.id", "Post.description", "User.email"])
     .execute();
-  await db.with(userId).deleteFrom("Post").execute();
+  await db.gated(userId).deleteFrom("Post").execute();
   const posts2 = await db
-    .with(userId)
+    .gated(userId)
     .selectFrom(["Post"])
     .innerJoin("User", "Post.authorId", "User.id")
     .select(["Post.id", "Post.description", "User.email"])
@@ -119,7 +123,7 @@ async function main() {
 
   console.log("User 2");
   const posts3 = await db
-    .with("2")
+    .gated("2")
     .selectFrom(["Post"])
     .innerJoin("User", "Post.authorId", "User.id")
     .select(["Post.id", "Post.description", "User.email"])

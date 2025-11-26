@@ -1,4 +1,5 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
+import { RowGateContextError } from "./errors";
 
 export async function standardValidate<T extends StandardSchemaV1>(
   schema: T,
@@ -9,7 +10,9 @@ export async function standardValidate<T extends StandardSchemaV1>(
 
   // if the `issues` field exists, the validation failed
   if (result.issues) {
-    throw new Error(JSON.stringify(result.issues, null, 2));
+    throw new RowGateContextError("Context schema validation failed", {
+      issues: result.issues,
+    });
   }
 
   return result.value;

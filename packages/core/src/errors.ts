@@ -29,21 +29,6 @@ export class RowGatePolicyError extends RowGateError {
   }
 }
 
-export class RowGateCheckFailedError extends RowGatePolicyError {
-  constructor(
-    message: string,
-    meta: {
-      table: string;
-      operation: RowGateOperation;
-      policyName?: string;
-      mismatches?: Record<string, { expected: unknown; actual: unknown }>;
-    },
-  ) {
-    super(message, meta);
-    this.name = "RowGateCheckFailedError";
-  }
-}
-
 export class RowGateAdapterError extends RowGateError {
   constructor(message: string, meta?: Record<string, unknown>) {
     super(message, "ROWGATE_ADAPTER_ERROR", meta);

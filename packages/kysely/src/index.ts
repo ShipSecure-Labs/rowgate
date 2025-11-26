@@ -1,4 +1,4 @@
-import { Adapter, Policy, assertPolicyCheck } from "@rowgate/core";
+import { Adapter, Policy, RowGatePolicyError } from "@rowgate/core";
 export * from "@rowgate/core";
 
 import {
@@ -24,17 +24,54 @@ type PolicyFilter<DB> = {
   ) => SelectQueryBuilder<DB, K, any>;
 };
 
+/**
+ * For Kysely, the policy check is a function that takes a query builder, row
+ * and returns a filtered query builder.
+ */
+type PolicyCheck<DB> = {
+  [K in TableNameOf<DB>]: (db: Kysely<DB>, row: DB[K]) => Promise<any>;
+};
+
 export function kyselyAdapter<DB>(
   db: Kysely<DB>,
-): Adapter<Kysely<DB>, TableNameOf<DB>, PolicyFilter<DB>> {
+): Adapter<Kysely<DB>, TableNameOf<DB>, PolicyFilter<DB>, PolicyCheck<DB>> {
   // Table names come from the DB generic.
   // At runtime Kysely doesn't expose schema, so this is type-only.
   const tableNames = [] as TableNameOf<DB>[];
 
+  const wrapExecute = <T extends object>(
+    builder: T,
+    beforeExecute: (method: string, args: any[]) => Promise<void> | void,
+  ) =>
+    new Proxy(builder as any, {
+      get(target, prop, receiver) {
+        const val = Reflect.get(target, prop, receiver);
+        if (typeof val !== "function") return val;
+
+        // Intercept common execution methods to run checks
+        const EXEC_METHODS = [
+          "execute",
+          "executeTakeFirst",
+          "executeTakeFirstOrThrow",
+          "run",
+          "stream",
+        ];
+
+        if (EXEC_METHODS.includes(prop as string)) {
+          return async (...args: any[]) => {
+            await beforeExecute(prop as string, args);
+            return val.apply(target, args);
+          };
+        }
+
+        return val;
+      },
+    });
+
   const applyProxy = (
     raw: any,
     ctx: any,
-    policy: Policy<TableNameOf<DB>, any, PolicyFilter<DB>>,
+    policy: Policy<TableNameOf<DB>, any, PolicyFilter<DB>, PolicyCheck<DB>>,
     // currently unused, but kept for future async context validation
     _validate: (ctx: any) => Promise<any>,
   ) => {
@@ -114,14 +151,17 @@ export function kyselyAdapter<DB>(
 
                 if (qbProp === "values" && typeof original === "function") {
                   return (values: any) => {
-                    assertPolicyCheck(check, values, {
-                      table: String(table),
-                      operation: "insert",
-                      policyName: "insert",
-                    });
-
                     const nextQb = original.call(qbTarget, values);
-                    return applyProxy(nextQb, ctx, policy, _validate);
+                    return wrapExecute(nextQb, async () => {
+                      try {
+                        const checkRes = await check(raw, values);
+                        if (!checkRes) throw new Error();
+                      } catch {
+                        throw new RowGatePolicyError(
+                          `Policy check failed for "${table}"`,
+                        );
+                      }
+                    });
                   };
                 }
 
@@ -209,14 +249,17 @@ export function kyselyAdapter<DB>(
 
                 if (qbProp === "set" && typeof original === "function") {
                   return (values: any) => {
-                    assertPolicyCheck(check, values, {
-                      table: String(table),
-                      operation: "update",
-                      policyName: "update",
-                    });
-
                     const nextQb = original.call(qbTarget, values);
-                    return applyProxy(nextQb, ctx, policy, _validate);
+                    return wrapExecute(nextQb, async () => {
+                      try {
+                        const checkRes = await check(raw, values);
+                        if (!checkRes) throw new Error();
+                      } catch {
+                        throw new RowGatePolicyError(
+                          `Policy check failed for "${table}"`,
+                        );
+                      }
+                    });
                   };
                 }
 
