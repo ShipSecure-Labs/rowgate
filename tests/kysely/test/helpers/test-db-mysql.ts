@@ -73,6 +73,19 @@ export function createRowgateDb(rawDb: Kysely<DB>) {
     context: z.string(),
     adapter: kyselyAdapter(rawDb),
     policy: {
+      User: (ctx: string) => ({
+        select: { filter: (qb) => qb.where("User.id", "=", ctx) },
+        insert: {
+          check: async (_db, row: UserTable) => !row.id || row.id === ctx,
+        },
+        update: {
+          filter: (qb) => qb.where("User.id", "=", ctx),
+          check: async (_db, row: UserTable) => !row.id || row.id === ctx,
+        },
+        delete: {
+          filter: (qb) => qb.where("User.id", "=", ctx),
+        },
+      }),
       Post: (ctx: string) => ({
         select: { filter: (qb) => qb.where("Post.authorId", "=", ctx) },
         insert: {

@@ -85,6 +85,90 @@ export function kyselyAdapter<DB>(
           return () => "[Kysely Rowgate Adapter]";
 
         /**
+         * SUBQUERIES INSIDE .select((eb) => [...])
+         *
+         * We wrap the ExpressionBuilder so that `eb.selectFrom(...)` also
+         * applies RowGate select filters and returns a proxied query builder.
+         */
+        if (prop === "select" && typeof val === "function") {
+          return (...args: any[]) => {
+            // Function-style select: `.select((eb) => [...])`
+            if (typeof args[0] === "function") {
+              const userCb = args[0] as (eb: any) => any;
+
+              const wrappedCb = (eb: any) => {
+                const ebProxy = new Proxy(eb, {
+                  get(ebTarget, ebProp, ebReceiver) {
+                    const ebVal = Reflect.get(ebTarget, ebProp, ebReceiver);
+
+                    // Intercept subquery selectFrom
+                    if (
+                      ebProp === "selectFrom" &&
+                      typeof ebVal === "function"
+                    ) {
+                      return <TB extends TableNameOf<DB>>(
+                        table: TB | TB[],
+                      ): SelectQueryBuilder<DB, TB, any> => {
+                        const qb = ebVal.call(
+                          ebTarget,
+                          table,
+                        ) as SelectQueryBuilder<DB, TB, any>;
+
+                        const tables = Array.isArray(table) ? table : [table];
+
+                        let qbRes = qb;
+                        for (const t of tables) {
+                          const tablePolicyFactory = policy[t];
+                          if (!tablePolicyFactory) continue;
+
+                          const p = tablePolicyFactory(ctx);
+                          const filter = p.select?.filter ?? undefined;
+                          if (filter) {
+                            qbRes = filter(qbRes as any) as any;
+                          }
+                        }
+
+                        return applyProxy(
+                          qbRes,
+                          ctx,
+                          policy,
+                          _validate,
+                        ) as SelectQueryBuilder<DB, TB, any>;
+                      };
+                    }
+
+                    if (typeof ebVal === "function") {
+                      return ebVal.bind(ebTarget);
+                    }
+
+                    return ebVal;
+                  },
+                });
+
+                return userCb(ebProxy);
+              };
+
+              // Use our wrapped callback instead of the original one
+              const qb = val.call(
+                target,
+                wrappedCb,
+                ...args.slice(1),
+              ) as SelectQueryBuilder<DB, any, any>;
+
+              return applyProxy(qb, ctx, policy, _validate);
+            }
+
+            // Non-callback `select([...])` – just proxy the resulting QB
+            const qb = val.call(target, ...args) as SelectQueryBuilder<
+              DB,
+              any,
+              any
+            >;
+            return applyProxy(qb, ctx, policy, _validate);
+          };
+        }
+
+        /**
          * SELECT
          */
         if (prop === "selectFrom" && typeof val === "function") {

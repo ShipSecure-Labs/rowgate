@@ -121,4 +121,43 @@ describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
     expect(postsUser2[0].id).toBe("2");
     expect(postsUser2[0].email).toBe("other@example.com");
   });
+
+  it("works correctly with subqueries", async () => {
+    await db
+      .gated("1")
+      .insertInto("Post")
+      .values({
+        id: "1",
+        title: "Hello World",
+        description: "Hello World",
+        authorId: "1",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .execute();
+
+    await db
+      .gated("2")
+      .insertInto("Post")
+      .values({
+        id: "2",
+        title: "Hello World [owned by 2]",
+        description: "Hello World",
+        authorId: "2",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .execute();
+
+    const postsUser1 = await db
+      .gated("2")
+      .selectFrom(["Post"])
+      .select((eb) => [
+        eb.selectFrom("User").select("email").limit(1).as("authorEmail"),
+      ])
+      .execute();
+
+    expect(postsUser1).toHaveLength(1);
+    expect(postsUser1[0].authorEmail).toBe("other@example.com");
+  });
 });
