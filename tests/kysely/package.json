@@ -1,0 +1,21 @@
+{
+  "name": "@tests/kysely",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@rowgate/core": "workspace:*",
+    "@rowgate/kysely": "workspace:*",
+    "@vitest/coverage-v8": "^4.0.14",
+    "dotenv": "^16.0.0",
+    "kysely": "^0.28.8",
+    "mysql2": "^3.15.3",
+    "ts-node": "^10.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^4.0.14",
+    "zod": "^4.1.13"
+  }
+}

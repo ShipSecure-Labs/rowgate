@@ -31,7 +31,6 @@
     "clean": "rimraf dist",
     "dev": "tsdown --watch --ignore-watch .turbo",
     "lint": "eslint .",
-    "test": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -40,8 +39,7 @@
   "devDependencies": {
     "eslint": "^9.11.0",
     "tsdown": "^0.15.6",
-    "typescript": "^5.6.2",
-    "vitest": "^2.0.5"
+    "typescript": "^5.6.2"
   },
   "peerDependencies": {
     "kysely": ">=0.20.0"

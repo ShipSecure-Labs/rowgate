@@ -31,7 +31,6 @@
     "clean": "rimraf dist",
     "dev": "tsdown --watch --ignore-watch .turbo",
     "lint": "eslint .",
-    "test": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

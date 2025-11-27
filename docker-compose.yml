@@ -1,12 +1,12 @@
 services:
   mysql:
     image: mysql:latest
-    container_name: gatekeeper-mysql
+    container_name: rowgate-mysql
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: example
-      MYSQL_USER: user
-      MYSQL_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: rowgate
+      MYSQL_DATABASE: rowgate_test
+      MYSQL_USER: rowgate
+      MYSQL_PASSWORD: rowgate
     ports:
       - "3306:3306"
