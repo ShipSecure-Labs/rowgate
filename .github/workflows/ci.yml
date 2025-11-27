@@ -2,46 +2,53 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: ["main"]
   pull_request:
-    branches:
-      - main
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: read
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: rowgate_test
+          MYSQL_USER: rowgate
+          MYSQL_PASSWORD: rowgate
+        ports:
+          - "3306:3306"
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=30
 
     env:
-      NODE_VERSION: 20.x
-      PNPM_VERSION: 9.0.0
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: 3306
+      MYSQL_USER: rowgate
+      MYSQL_PASSWORD: rowgate
+      MYSQL_DATABASE: rowgate_test
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
-          version: ${{ env.PNPM_VERSION }}
+          node-version: 20
+          cache: "pnpm"
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          version: 9
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Option A: workspace-wide build (recommended)
-      - name: Build all packages
-        run: |
-          if pnpm run | grep -q " build"; then
-            pnpm run build
-          else
-            echo "No root build script, skipping."
-          fi
+      - name: Build packages
+        run: pnpm build
+
+      - name: Run Kysely tests
+        run: pnpm --filter @tests/kysely test
