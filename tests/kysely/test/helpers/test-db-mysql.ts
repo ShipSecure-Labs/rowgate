@@ -25,11 +25,11 @@ export interface DB {
 
 export async function createKyselyInstance() {
   const pool = createPool({
-    host: process.env.MYSQL_HOST,
-    port: Number(process.env.MYSQL_PORT),
-    user: process.env.MYSQL_USER,
-    password: process.env.MYSQL_PASSWORD,
-    database: process.env.MYSQL_DATABASE,
+    host: process.env.MYSQL_HOST || "127.0.0.1",
+    port: Number(process.env.MYSQL_PORT || "3307"),
+    user: process.env.MYSQL_USER || "rowgate",
+    password: process.env.MYSQL_PASSWORD || "rowgate",
+    database: process.env.MYSQL_DATABASE || "rowgate_test",
     waitForConnections: true,
     connectionLimit: 10,
     ssl: {

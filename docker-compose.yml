@@ -9,4 +9,4 @@ services:
       MYSQL_USER: rowgate
       MYSQL_PASSWORD: rowgate
     ports:
-      - "3306:3306"
+      - "3307:3306"
