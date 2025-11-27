@@ -7,6 +7,7 @@ import {
   DB,
 } from "./helpers/test-db-mysql";
 import type { Kysely } from "kysely";
+import { jsonArrayFrom, jsonObjectFrom } from "kysely/helpers/mysql";
 
 describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
   let rawDb: Kysely<DB>;
@@ -120,5 +121,116 @@ describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
     expect(postsUser2).toHaveLength(1);
     expect(postsUser2[0].id).toBe("2");
     expect(postsUser2[0].email).toBe("other@example.com");
+  });
+
+  it("works correctly with subqueries", async () => {
+    await db
+      .gated("2")
+      .insertInto("Post")
+      .values({
+        id: "1",
+        title: "Hello World",
+        description: "Hello World",
+        authorId: "2",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .execute();
+
+    const postsUser1 = await db
+      .gated("2")
+      .selectFrom(["Post"])
+      .select((eb) =>
+        eb
+          .selectFrom("User")
+          .select((eb2) => ["email"])
+          .limit(1)
+          .as("authorEmail"),
+      )
+      .execute();
+
+    expect(postsUser1).toHaveLength(1);
+    expect(postsUser1[0].authorEmail).toBe("other@example.com");
+  });
+
+  it("works correctly with jsonObjectFrom/jsonArrayFrom subqueries", async () => {
+    await db
+      .gated("2")
+      .insertInto("Post")
+      .values({
+        id: "1",
+        title: "Hello World",
+        description: "Hello World",
+        authorId: "2",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .execute();
+
+    const postsUser1 = await db
+      .gated("2")
+      .selectFrom(["Post"])
+      .select((eb) => [
+        jsonObjectFrom(
+          eb
+            .selectFrom("User")
+            .select("email")
+            .where("User.id", "=", "2")
+            .limit(1),
+        ).as("author"),
+      ])
+      .execute();
+
+    expect(postsUser1).toHaveLength(1);
+    expect(postsUser1[0].author?.email).toBe("other@example.com");
+
+    const postsUser2 = await db
+      .gated("2")
+      .selectFrom(["Post"])
+      .select((eb) => [
+        jsonObjectFrom(
+          eb
+            .selectFrom("User")
+            .select("email")
+            .where("User.id", "=", "1")
+            .limit(1),
+        ).as("author"),
+      ])
+      .execute();
+
+    expect(postsUser2).toHaveLength(1);
+    expect(postsUser2[0].author).toBe(null);
+  });
+
+  it("works correctly with deeply nested jsonObjectFrom/jsonArrayFrom subqueries", async () => {
+    await db
+      .gated("2")
+      .insertInto("Post")
+      .values({
+        id: "1",
+        title: "Hello World",
+        description: "Hello World",
+        authorId: "2",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .execute();
+
+    const postsUser1 = await db
+      .gated("2")
+      .selectFrom(["Post"])
+      .select((eb) => [
+        jsonObjectFrom(
+          eb
+            .selectFrom("User")
+            .select("email")
+            .where("User.id", "=", "2")
+            .limit(1),
+        ).as("author"),
+      ])
+      .execute();
+
+    expect(postsUser1).toHaveLength(1);
+    expect(postsUser1[0].author?.email).toBe("other@example.com");
   });
 });

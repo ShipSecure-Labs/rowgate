@@ -83,6 +83,47 @@ export function kyselyAdapter<DB>(
         if (prop === "then") return undefined;
         if (prop === Symbol.for("nodejs.util.inspect.custom"))
           return () => "[Kysely Rowgate Adapter]";
+        /**
+         * SUBQUERIES INSIDE .select((eb) => [...])
+         *
+         * We don't duplicate selectFrom logic. Instead we just:
+         * - wrap the ExpressionBuilder `eb` with `applyProxy`
+         * - so that any `eb.selectFrom(...)` goes through the same
+         *   selectFrom handler as top-level queries.
+         */
+        if (prop === "select" && typeof val === "function") {
+          return (...args: any[]) => {
+            // Function-style select: `.select((eb) => [...])`
+            if (typeof args[0] === "function") {
+              const userCb = args[0] as (eb: any) => any;
+
+              const wrappedCb = (eb: any) => {
+                // IMPORTANT: reuse applyProxy on the ExpressionBuilder.
+                // This means eb.selectFrom(...) will hit the *same*
+                // selectFrom handler defined below, with all the policy logic.
+                const proxiedEb = applyProxy(eb, ctx, policy, _validate);
+                return userCb(proxiedEb);
+              };
+
+              const qb = val.call(
+                target,
+                wrappedCb,
+                ...args.slice(1),
+              ) as SelectQueryBuilder<DB, any, any>;
+
+              // And of course, proxy the resulting query builder as well.
+              return applyProxy(qb, ctx, policy, _validate);
+            }
+
+            // Non-callback `.select(...)` → just proxy the resulting QB.
+            const qb = val.call(target, ...args) as SelectQueryBuilder<
+              DB,
+              any,
+              any
+            >;
+            return applyProxy(qb, ctx, policy, _validate);
+          };
+        }
 
         /**
          * SELECT
