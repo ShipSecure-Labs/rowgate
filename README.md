@@ -77,12 +77,12 @@ const db = withRowgate({
 
 ### Supported
 
-- **Kysely** --- `@rowgate/kysely`\
+- **Kysely** - `@rowgate/kysely`\
   **Status:** ✅ Stable
 
 ### In Progress
 
-- **Prisma** --- `@rowgate/prisma`\
+- **Prisma** - `@rowgate/prisma`\
   **Status:** 🚧 Work in progress; API may change
 
 ## 🛠 Custom Adapters
