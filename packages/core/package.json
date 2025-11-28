@@ -12,7 +12,10 @@
   ],
   "license": "MIT",
   "author": "Simon Koeck <simon@koeck.dev> (https://simonkoeck.com/)",
-  "repository": "shipsecure-labs/rowgate",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ShipSecure-Labs/rowgate.git"
+  },
   "homepage": "https://rowgate.com/docs",
   "exports": {
     ".": {
