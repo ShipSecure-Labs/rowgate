@@ -35,7 +35,7 @@ pnpm add @rowgate/kysely
 pnpm add @rowgate/prisma
 ```
 
-You can also install the adapter directly, which has @rowgate/core as a dependency.
+You can also install the adapter directly - they have `@rowgate/core` as a dependency.
 
 ## 🧠 How RowGate Works
 
