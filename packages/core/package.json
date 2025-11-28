@@ -1,6 +1,6 @@
 {
   "name": "@rowgate/core",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "type": "module",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -10,7 +10,8 @@
     "LICENSE",
     "README.md"
   ],
-  "author": "Simon Koeck <simon@koeck.dev>",
+  "license": "MIT",
+  "author": "Simon Koeck <simon@koeck.dev> (https://simonkoeck.com/)",
   "repository": "shipsecure-labs/rowgate",
   "homepage": "https://rowgate.com/docs",
   "exports": {
