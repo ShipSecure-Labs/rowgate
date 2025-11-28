@@ -47,7 +47,7 @@ jobs:
       - name: Publish @rowgate/core to npm
         run: |
           cd packages/core
-          pnpm publish --access public
+          pnpm publish --access public --no-git-checks
 
   publish-kysely:
     # Only run if this is a kysely release AND it's targeting main
@@ -91,4 +91,4 @@ jobs:
       - name: Publish @rowgate/kysely to npm
         run: |
           cd packages/kysely
-          pnpm publish --access public
+          pnpm publish --access public --no-git-checks
