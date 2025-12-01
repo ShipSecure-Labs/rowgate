@@ -8,6 +8,7 @@ import {
 } from "./helpers/test-db-mysql";
 import type { Kysely } from "kysely";
 import { jsonArrayFrom, jsonObjectFrom } from "kysely/helpers/mysql";
+import { RowGatePolicyError } from "@rowgate/core";
 
 describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
   let rawDb: Kysely<DB>;
@@ -80,7 +81,7 @@ describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
           updatedAt: new Date(),
         })
         .execute(),
-    ).rejects.toBeInstanceOf(Error);
+    ).rejects.toBeInstanceOf(RowGatePolicyError);
 
     await db
       .gated("1")
@@ -100,17 +101,6 @@ describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
     expect(postsUser1[0].description).toBe("Hello World [updated]");
     expect(postsUser1[0].email).toBe("real@example.com");
 
-    await db.gated("1").deleteFrom("Post").execute();
-
-    const postsUser1AfterDelete = await db
-      .gated("1")
-      .selectFrom(["Post"])
-      .innerJoin("User", "Post.authorId", "User.id")
-      .select(["Post.id", "Post.description", "User.email"])
-      .execute();
-
-    expect(postsUser1AfterDelete).toHaveLength(0);
-
     const postsUser2 = await db
       .gated("2")
       .selectFrom(["Post"])
@@ -121,6 +111,52 @@ describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
     expect(postsUser2).toHaveLength(1);
     expect(postsUser2[0].id).toBe("2");
     expect(postsUser2[0].email).toBe("other@example.com");
+
+    await db
+      .gated("1")
+      .updateTable("Post")
+      .set({ description: "Updated" })
+      .where("Post.id", "=", "1")
+      .execute();
+    await db
+      .gated("1")
+      .updateTable("Post")
+      .set({ description: "Updated" })
+      .where("Post.id", "=", "2")
+      .execute();
+
+    // policy check
+
+    await expect(
+      db.gated("1").updateTable("Post").set({ authorId: "2" }).execute(),
+    ).rejects.toBeInstanceOf(RowGatePolicyError);
+
+    const post1 = await db
+      .gated("1")
+      .selectFrom(["Post"])
+      .select(["Post.id", "Post.description"])
+      .where("Post.id", "=", "1")
+      .executeTakeFirst();
+    expect(post1?.description).toBe("Updated");
+
+    const post2 = await db
+      .gated("2")
+      .selectFrom(["Post"])
+      .select(["Post.id", "Post.description"])
+      .where("Post.id", "=", "2")
+      .executeTakeFirst();
+    expect(post2?.description).toBe("Hello World");
+
+    await db.gated("1").deleteFrom("Post").execute();
+
+    const postsUser1AfterDelete = await db
+      .gated("1")
+      .selectFrom(["Post"])
+      .innerJoin("User", "Post.authorId", "User.id")
+      .select(["Post.id", "Post.description", "User.email"])
+      .execute();
+
+    expect(postsUser1AfterDelete).toHaveLength(0);
   });
 
   it("works correctly with subqueries", async () => {
