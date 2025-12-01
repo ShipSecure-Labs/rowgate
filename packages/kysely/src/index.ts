@@ -62,9 +62,16 @@ export function kyselyAdapter<DB>(
             await beforeExecute(prop as string, args);
             return val.apply(target, args);
           };
+        } else {
+          return (...args: any[]) => {
+            const qb = val.call(target, ...args) as SelectQueryBuilder<
+              DB,
+              any,
+              any
+            >;
+            return wrapExecute(qb, beforeExecute);
+          };
         }
-
-        return val;
       },
     });
 
