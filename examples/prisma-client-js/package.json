@@ -1,0 +1,25 @@
+{
+  "name": "@examples/prisma-client-js",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "schema:dev": "prisma migrate dev",
+    "schema:generate": "prisma generate",
+    "watch": "tsdown --watch --ignore-watch .turbo",
+    "dev": "node dist/index.mjs",
+    "build": "tsdown"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.2",
+    "prisma": "^6.16.3",
+    "tsdown": "^0.15.6",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@prisma/client": "6.16.3",
+    "@rowgate/prisma": "workspace:*",
+    "zod": "^4.1.11"
+  }
+}
