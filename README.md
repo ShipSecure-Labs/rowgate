@@ -57,17 +57,17 @@ const db = withRowgate({
 
 ```ts
 const db = withRowgate({
-  context: z.string(),
-  adapter: someAdapter(dbClient),
+  context: z.object({ userId: z.string() }),
+  adapter: someAdapter(rawDb),
   policy: {
-    Post: (userId) => ({
-      select: { filter: (qb) => qb.where("authorId", "=", userId) },
-      insert: { check: (row) => row.authorId === userId },
+    Post: (ctx) => ({
+      select: { filter: (qb) => qb.where("authorId", "=", ctx.userId) },
+      insert: { check: (row) => row.authorId === ctx.userId },
       update: {
-        filter: (qb) => qb.where("authorId", "=", userId),
-        check: (row) => row.authorId === userId,
+        filter: (qb) => qb.where("authorId", "=", ctx.userId),
+        check: (row) => row.authorId === ctx.userId,
       },
-      delete: { filter: (qb) => qb.where("authorId", "=", userId) },
+      delete: { filter: (qb) => qb.where("authorId", "=", ctx.userId) },
     }),
   },
 });
@@ -85,11 +85,6 @@ const db = withRowgate({
 - **Prisma** - `@rowgate/prisma`\
   **Status:** 🚧 Work in progress; API may change
 
-## 🛠 Custom Adapters
-
-RowGate exposes a minimal `Adapter` interface that you can implement to
-add support for any ORM or raw DB client.
-
 ## 📄 License
 
-MIT --- see `LICENSE` for details.
+MIT - see `LICENSE` for details.
