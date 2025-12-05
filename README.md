@@ -59,8 +59,8 @@ const db = withRowgate({
 const db = withRowgate({
   context: z.object({ userId: z.string() }),
   adapter: someAdapter(rawDb),
-  policy: {
-    Post: (ctx) => ({
+  policy: (ctx) => ({
+    Post: {
       select: { filter: (qb) => qb.where("authorId", "=", ctx.userId) },
       insert: { check: (row) => row.authorId === ctx.userId },
       update: {
@@ -68,8 +68,8 @@ const db = withRowgate({
         check: (row) => row.authorId === ctx.userId,
       },
       delete: { filter: (qb) => qb.where("authorId", "=", ctx.userId) },
-    }),
-  },
+    },
+  }),
 });
 ```
 

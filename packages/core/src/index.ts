@@ -13,19 +13,17 @@ export type Adapter<
   tableNames: readonly Table[];
   applyProxy?: (
     raw: RawAdapter,
-    ctx: any,
-    policy: Policy<Table, any, PolicyFilter, PolicyCheck>,
+    policy: Policy<Table, PolicyFilter, PolicyCheck>,
     validate: (ctx: any) => Promise<any>,
   ) => RawAdapter;
 };
 
 export type Policy<
   Table extends string,
-  Context,
   PolicyFilter extends Record<Table, any>,
   PolicyCheck extends Record<Table, any>,
 > = {
-  [K in Table]?: (ctx: Context) => {
+  [K in Table]?: {
     select?: {
       filter?: PolicyFilter[K];
     };
@@ -51,12 +49,9 @@ export function withRowgate<
 >(options: {
   adapter: Adapter<RawAdapter, Table, PolicyFilter, PolicyCheck>;
   context: Schema;
-  policy: Policy<
-    Table,
-    StandardSchemaV1.InferInput<Schema>,
-    PolicyFilter,
-    PolicyCheck
-  >;
+  policy: (
+    ctx: StandardSchemaV1.InferInput<Schema>,
+  ) => Policy<Table, PolicyFilter, PolicyCheck>;
 }) {
   return {
     gated(ctx: StandardSchemaV1.InferInput<Schema>): RawAdapter {
@@ -66,8 +61,7 @@ export function withRowgate<
 
       return options.adapter.applyProxy(
         options.adapter.raw,
-        ctx,
-        options.policy,
+        options.policy(ctx),
         async (ctx: any) => {
           return await standardValidate(options.context, ctx);
         },
