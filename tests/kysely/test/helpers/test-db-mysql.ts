@@ -72,36 +72,38 @@ export function createRowgateDb(rawDb: Kysely<DB>) {
   const db = withRowgate({
     context: z.string(),
     adapter: kyselyAdapter(rawDb),
-    policy: {
-      User: (ctx: string) => ({
-        select: { filter: (qb) => qb.where("User.id", "=", ctx) },
+    policy: (ctx) => ({
+      User: {
+        select: { filter: (qb, table) => qb.where(`${table}.id`, "=", ctx) },
         insert: {
           check: async (_db, row: UserTable) => !row.id || row.id === ctx,
         },
         update: {
-          filter: (qb) => qb.where("User.id", "=", ctx),
+          filter: (qb, table) => qb.where(`${table}.id`, "=", ctx),
           check: async (_db, row: UserTable) => !row.id || row.id === ctx,
         },
         delete: {
-          filter: (qb) => qb.where("User.id", "=", ctx),
+          filter: (qb, table) => qb.where(`${table}.id`, "=", ctx),
         },
-      }),
-      Post: (ctx: string) => ({
-        select: { filter: (qb) => qb.where("Post.authorId", "=", ctx) },
+      },
+      Post: {
+        select: {
+          filter: (qb, table) => qb.where(`${table}.authorId`, "=", ctx),
+        },
         insert: {
           check: async (_db, row: PostTable) =>
             !row.authorId || row.authorId === ctx,
         },
         update: {
-          filter: (qb) => qb.where("Post.authorId", "=", ctx),
+          filter: (qb, table) => qb.where(`${table}.authorId`, "=", ctx),
           check: async (_db, row: PostTable) =>
             !row.authorId || row.authorId === ctx,
         },
         delete: {
-          filter: (qb) => qb.where("Post.authorId", "=", ctx),
+          filter: (qb, table) => qb.where(`${table}.authorId`, "=", ctx),
         },
-      }),
-    },
+      },
+    }),
   });
 
   return db;
