@@ -126,7 +126,6 @@ describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
       .execute();
 
     // policy check
-
     await expect(
       db.gated("1").updateTable("Post").set({ authorId: "2" }).execute(),
     ).rejects.toBeInstanceOf(RowGatePolicyError);
@@ -268,5 +267,210 @@ describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
 
     expect(postsUser1).toHaveLength(1);
     expect(postsUser1[0].author?.email).toBe("other@example.com");
+  });
+
+  it("applies Post policies when selecting from aliased tables", async () => {
+    const now = new Date();
+
+    await db
+      .ungated()
+      .insertInto("Post")
+      .values({
+        id: "1",
+        title: "Owned by 1",
+        description: "Owned by 1",
+        authorId: "1",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .execute();
+
+    await db
+      .ungated()
+      .insertInto("Post")
+      .values({
+        id: "2",
+        title: "Owned by 2",
+        description: "Owned by 2",
+        authorId: "2",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .execute();
+
+    const postsUser1 = await db
+      .gated("1")
+      .selectFrom("Post as p")
+      .select(["p.id", "p.authorId"])
+      .orderBy("p.id")
+      .execute();
+
+    expect(postsUser1).toHaveLength(1);
+    expect(postsUser1[0].authorId).toBe("1");
+  });
+
+  it("applies Post policies when using withSchema", async () => {
+    const now = new Date();
+
+    await db
+      .ungated()
+      .insertInto("Post")
+      .values({
+        id: "1",
+        title: "Owned by 1",
+        description: "Owned by 1",
+        authorId: "1",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .execute();
+
+    await db
+      .ungated()
+      .insertInto("Post")
+      .values({
+        id: "2",
+        title: "Owned by 2",
+        description: "Owned by 2",
+        authorId: "2",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .execute();
+
+    const postsUser1 = await db
+      .gated("2")
+      .withSchema("rowgate_test")
+      .selectFrom("Post")
+      .select(["Post.id", "Post.authorId"])
+      .execute();
+
+    expect(postsUser1).toHaveLength(1);
+    expect(postsUser1[0].authorId).toBe("2");
+  });
+
+  it("applies Post policies inside CTEs created with with()", async () => {
+    const now = new Date();
+
+    await db
+      .ungated()
+      .insertInto("Post")
+      .values({
+        id: "1",
+        title: "Owned by 1",
+        description: "Owned by 1",
+        authorId: "1",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .execute();
+
+    await db
+      .ungated()
+      .insertInto("Post")
+      .values({
+        id: "2",
+        title: "Owned by 2",
+        description: "Owned by 2",
+        authorId: "2",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .execute();
+
+    const postsFromCte = await db
+      .gated("1")
+      .with("user_posts", (qb) => qb.selectFrom("Post").selectAll())
+      .selectFrom("user_posts")
+      .selectAll()
+      .execute();
+
+    expect(postsFromCte).toHaveLength(1);
+    expect((postsFromCte as any)[0].authorId).toBe("1");
+  });
+
+  it("applies Post policies for insert expressions with subqueries", async () => {
+    const now = new Date();
+
+    // Users 1 and 2 exist from beforeEach
+    // Insert a Post for ctx=2 using an INSERT ... SELECT expression
+    // The subquery selects MIN(User.id) from {1,2}. If RLS is applied, it only
+    // sees '2', so authorId should be '2'. If not, it picks '1'.
+    await db
+      .gated("2")
+      .insertInto("Post")
+      .columns([
+        "id",
+        "title",
+        "description",
+        "authorId",
+        "createdAt",
+        "updatedAt",
+      ])
+      .expression((eb) =>
+        eb
+          .selectFrom("User")
+          .select((eb2) => [
+            eb2.val("expr-post").as("id"),
+            eb2.val("From expression").as("title"),
+            eb2.val("From expression").as("description"),
+            eb2.ref("User.id").as("authorId"),
+            eb2.val(now).as("createdAt"),
+            eb2.val(now).as("updatedAt"),
+          ])
+          .where("User.id", "in", ["1", "2"])
+          .orderBy("User.id", "asc")
+          .limit(1),
+      )
+      .execute();
+
+    const postsForCtx2 = await db
+      .gated("2")
+      .selectFrom("Post")
+      .select(["id", "authorId"])
+      .execute();
+
+    expect(postsForCtx2).toHaveLength(1);
+    expect(postsForCtx2[0].authorId).toBe("2");
+  });
+
+  it("applies Post policies inside where callback subqueries", async () => {
+    const now = new Date();
+
+    // Insert a post for author 2 only, ungated
+    await db
+      .ungated()
+      .insertInto("Post")
+      .values({
+        id: "1",
+        title: "Owned by 2",
+        description: "Owned by 2",
+        authorId: "2",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .execute();
+
+    // From the perspective of ctx=1:
+    // - If the subquery in where() is NOT filtered by ctx, it sees the Post
+    //   with authorId=2 and notExists(...) will be false → 0 rows.
+    // - If it IS filtered, it sees no posts with authorId=2 and notExists(...)
+    //   is true → 1 row.
+    const usersForCtx1 = await db
+      .gated("1")
+      .selectFrom("User")
+      .selectAll()
+      .where("User.id", "=", "1")
+      .where((eb) =>
+        eb.not(
+          eb.exists((qb) =>
+            qb.selectFrom("Post").select("id").where("Post.authorId", "=", "2"),
+          ),
+        ),
+      )
+      .execute();
+
+    expect(usersForCtx1).toHaveLength(1);
+    expect(usersForCtx1[0].id).toBe("1");
   });
 });
