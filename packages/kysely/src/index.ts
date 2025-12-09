@@ -10,10 +10,17 @@ import {
   Kysely,
   SelectQueryBuilder,
   InsertQueryBuilder,
-  UpdateQueryBuilder,
   DeleteQueryBuilder,
 } from "kysely";
 import { parsePossibleTableAlias } from "./helpers/table-alias";
+
+const EXEC_METHODS = [
+  "execute",
+  "executeTakeFirst",
+  "executeTakeFirstOrThrow",
+  "run",
+  "stream",
+];
 
 /**
  * Extract table names from the DB type.
@@ -98,6 +105,93 @@ export function kyselyAdapter<DB>(
               any
             >;
             return applyProxy(qb, policy, _preExecute);
+          };
+        }
+
+        /**
+         * TRANSACTIONS
+         */
+        if (prop === "transaction" && typeof val === "function") {
+          // `val` is the original db.transaction method
+          return (...args: any[]) => {
+            // Get the original TransactionBuilder from Kysely
+            const txBuilder = val.apply(target, args) as any;
+
+            // Wrap the TransactionBuilder so we can intercept `.execute`
+            const wrappedTxBuilder = new Proxy(txBuilder, {
+              get(txTarget, txProp, txReceiver) {
+                const original = Reflect.get(txTarget, txProp, txReceiver);
+
+                // Intercept only the `execute` method of the TransactionBuilder
+                if (txProp === "execute" && typeof original === "function") {
+                  // `cb` is the user callback: (trx) => { ... }
+                  return async (cb: (trx: any) => any) => {
+                    for (const cb of _preExecute) {
+                      await cb();
+                    }
+
+                    // Call the original .execute, but wrap the trx it passes in
+                    return original.call(txTarget, (rawTrx: any) => {
+                      // IMPORTANT: gate the transaction connection itself
+                      const gatedTrx = applyProxy(rawTrx, policy, []);
+
+                      // Call user callback with gated trx
+                      return cb(gatedTrx);
+                    });
+                  };
+                }
+
+                if (typeof original === "function") {
+                  return original.bind(txTarget);
+                }
+
+                return original;
+              },
+            });
+
+            return wrappedTxBuilder;
+          };
+        }
+
+        /**
+         * MANUAL TRANSACTIONS via startTransaction()
+         */
+        if (prop === "startTransaction" && typeof val === "function") {
+          return (...args: any[]) => {
+            const txBuilder = val.apply(target, args) as any;
+
+            const wrappedTxBuilder = new Proxy(txBuilder, {
+              get(txTarget, txProp, txReceiver) {
+                const original = Reflect.get(txTarget, txProp, txReceiver);
+
+                if (
+                  EXEC_METHODS.includes(txProp as string) &&
+                  typeof original === "function"
+                ) {
+                  return async (...execArgs: any[]) => {
+                    for (const cb of _preExecute) {
+                      await cb();
+                    }
+
+                    // Start the real transaction
+                    const rawTrx = await original.apply(txTarget, execArgs);
+
+                    // Wrap the transaction connection so policies apply inside it
+                    const gatedTrx = applyProxy(rawTrx, policy, []);
+
+                    return gatedTrx;
+                  };
+                }
+
+                if (typeof original === "function") {
+                  return original.bind(txTarget);
+                }
+
+                return original;
+              },
+            });
+
+            return wrappedTxBuilder;
           };
         }
 
@@ -361,14 +455,6 @@ export function kyselyAdapter<DB>(
           };
         }
 
-        const EXEC_METHODS = [
-          "execute",
-          "executeTakeFirst",
-          "executeTakeFirstOrThrow",
-          "run",
-          "stream",
-        ];
-
         if (EXEC_METHODS.includes(prop as string)) {
           return async (...args: any[]) => {
             for (const cb of _preExecute) {
@@ -402,12 +488,8 @@ export function kyselyAdapter<DB>(
   return {
     name: "kysely",
     raw: db,
-    applyProxy: (raw, policy, validate) => {
-      return applyProxy(raw, policy, [
-        async () => {
-          await validate();
-        },
-      ]);
+    applyProxy: (raw, policy) => {
+      return applyProxy(raw, policy, []);
     },
     tableNames,
   };

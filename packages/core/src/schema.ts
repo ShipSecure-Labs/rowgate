@@ -1,12 +1,16 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { RowGateContextError } from "./errors";
+import { RowGateContextError, RowGateNotSupportedError } from "./errors";
 
-export async function standardValidate<T extends StandardSchemaV1>(
+export function standardValidate<T extends StandardSchemaV1>(
   schema: T,
   input: StandardSchemaV1.InferInput<T>,
-): Promise<StandardSchemaV1.InferOutput<T>> {
+): StandardSchemaV1.InferOutput<T> {
   let result = schema["~standard"].validate(input);
-  if (result instanceof Promise) result = await result;
+
+  if (result instanceof Promise)
+    throw new RowGateNotSupportedError(
+      "Please choose a validation library which is synchronous (e.g. zod). Async context validation is not supported.",
+    );
 
   // if the `issues` field exists, the validation failed
   if (result.issues) {

@@ -42,7 +42,7 @@ describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
   });
 
   it("validated the context correctly in runtime", async () => {
-    await expect(
+    await expect(async () =>
       db
         .gated(
           // @ts-ignore

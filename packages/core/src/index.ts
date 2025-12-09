@@ -14,7 +14,6 @@ export type Adapter<
   applyProxy?: (
     raw: RawAdapter,
     policy: Policy<Table, PolicyFilter, PolicyCheck>,
-    validate: () => Promise<any>,
   ) => RawAdapter;
 };
 
@@ -40,6 +39,10 @@ export type Policy<
   };
 };
 
+export type RowGateOptions = {
+  disableContextValidation?: boolean;
+};
+
 export function withRowgate<
   RawAdapter,
   Table extends string,
@@ -52,6 +55,7 @@ export function withRowgate<
   policy: (
     ctx: StandardSchemaV1.InferInput<Schema>,
   ) => Policy<Table, PolicyFilter, PolicyCheck>;
+  options?: RowGateOptions;
 }) {
   return {
     gated(ctx: StandardSchemaV1.InferInput<Schema>): RawAdapter {
@@ -59,12 +63,13 @@ export function withRowgate<
         throw new Error(`Adapter ${options.adapter.name} not implemented yet`);
       }
 
+      let ctxRendered = ctx;
+      if (!options.options?.disableContextValidation)
+        ctxRendered = standardValidate(options.context, ctx);
+
       return options.adapter.applyProxy(
         options.adapter.raw,
-        options.policy(ctx),
-        async () => {
-          return await standardValidate(options.context, ctx);
-        },
+        options.policy(ctxRendered),
       );
     },
     ungated(): RawAdapter {

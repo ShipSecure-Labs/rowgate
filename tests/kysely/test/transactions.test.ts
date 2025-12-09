@@ -40,7 +40,7 @@ describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
       .execute();
   });
 
-  it("has transaction support", async () => {
+  it("has .transaction() support", async () => {
     await db
       .gated("1")
       .transaction()
@@ -51,7 +51,7 @@ describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
             id: "1",
             title: "Hello World",
             description: "Hello World",
-            authorId: "2",
+            authorId: "1",
             createdAt: new Date(),
             updatedAt: new Date(),
           })
@@ -63,13 +63,12 @@ describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
             id: "2",
             title: "Hello World [owned by 2]",
             description: "Hello World",
-            authorId: "2",
+            authorId: "1",
             createdAt: new Date(),
             updatedAt: new Date(),
           })
           .executeTakeFirstOrThrow();
       });
-    // Post 2 should not be inserted, only post 1 is allowed
 
     const posts = await db
       .ungated()
@@ -77,7 +76,50 @@ describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
       .select(["id", "authorId"])
       .execute();
 
-    expect(posts).toHaveLength(0);
+    expect(posts).toHaveLength(2);
+  });
+
+  it("has .transaction() support with a policy error in the trx", async () => {
+    await db.ungated().deleteFrom("Post").execute();
+
+    await db
+      .gated("1")
+      .transaction()
+      .execute(async (trx) => {
+        await trx
+          .insertInto("Post")
+          .values({
+            id: "1",
+            title: "Hello World",
+            description: "Hello World",
+            authorId: "1",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .executeTakeFirstOrThrow();
+        // this should fail
+        await expect(
+          trx
+            .insertInto("Post")
+            .values({
+              id: "2",
+              title: "Hello World [owned by 2]",
+              description: "Hello World",
+              authorId: "2",
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .executeTakeFirstOrThrow(),
+        ).rejects.toBeInstanceOf(RowGatePolicyError);
+      });
+
+    const posts = await db
+      .ungated()
+      .selectFrom("Post")
+      .select(["id", "authorId"])
+      .execute();
+
+    expect(posts).toHaveLength(1);
   });
 
   it("supports manual transactions with savepoints", async () => {
