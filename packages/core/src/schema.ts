@@ -5,7 +5,7 @@ export function standardValidate<T extends StandardSchemaV1>(
   schema: T,
   input: StandardSchemaV1.InferInput<T>,
 ): StandardSchemaV1.InferOutput<T> {
-  let result = schema["~standard"].validate(input);
+  const result = schema["~standard"].validate(input);
 
   if (result instanceof Promise)
     throw new RowGateNotSupportedError(

@@ -8,16 +8,17 @@
     "dev": "turbo run dev --parallel",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "typecheck": "turbo run typecheck",
-    "release": "changeset publish",
-    "version-packages": "changeset version"
+    "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.6.2",
+    "eslint": "^9.11.0",
     "prettier": "^3.6.2",
-    "turbo": "^2.5.8",
-    "typescript": "5.9.2",
     "rimraf": "^6.0.1",
-    "@changesets/cli": "^2.29.7",
-    "@types/node": "^24.6.2"
+    "turbo": "^2.5.8",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.49.0",
+    "vitest": "^4.0.15"
   }
 }
