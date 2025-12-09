@@ -54,5 +54,4 @@ describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
         .executeTakeFirstOrThrow(),
     ).rejects.toBeInstanceOf(RowGateContextError);
   });
-  // transaction support
 });
