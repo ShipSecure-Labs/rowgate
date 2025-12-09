@@ -75,8 +75,6 @@ export async function createKyselyInstance(): Promise<{
   // 1) actually create the DB
   await createDatabase(dbName);
 
-  console.log("Created DB", dbName);
-
   // 2) connect to the newly created DB
   const pool = createPool({
     ...baseMysqlConfig,

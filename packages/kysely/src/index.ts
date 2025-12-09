@@ -1,4 +1,9 @@
-import { Adapter, Policy, RowGatePolicyError } from "@rowgate/core";
+import {
+  Adapter,
+  Policy,
+  RowGatePolicyError,
+  RowGateNotSupportedError,
+} from "@rowgate/core";
 export * from "@rowgate/core";
 
 import {
@@ -160,6 +165,29 @@ export function kyselyAdapter<DB>(
         }
 
         /**
+         * WITH (CTEs)
+         * Syntax is like .with("name", (qb) => qb.selectFrom(...))
+         * Call applyProxy on args[1]
+         */
+        if (prop === "with" && typeof val === "function") {
+          return (...args: any[]) => {
+            if (typeof args[1] === "function") {
+              const originalFactory = args[1];
+
+              args[1] = (qb: any) => {
+                // ensure anything the user does inside the factory is also gated
+                const proxiedQb = applyProxy(qb, policy, _validate);
+                const expression = originalFactory(proxiedQb);
+                return applyProxy(expression, policy, _validate);
+              };
+            }
+
+            const result = val.apply(target, args);
+            return result;
+          };
+        }
+
+        /**
          * INSERT
          *
          * Enforce insert.check by intercepting `.values(...)`.
@@ -188,6 +216,12 @@ export function kyselyAdapter<DB>(
             const wrapped = new Proxy(qb as any, {
               get(qbTarget, qbProp, qbReceiver) {
                 const original = Reflect.get(qbTarget, qbProp, qbReceiver);
+
+                if (qbProp == "columns" || qbProp == "expression") {
+                  throw new RowGateNotSupportedError(
+                    `RowGate does not support ".expression(...)" for inserts. Please use ".ungated()" if you need expressions.`,
+                  );
+                }
 
                 if (qbProp === "values" && typeof original === "function") {
                   return (values: any) => {

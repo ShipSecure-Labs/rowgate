@@ -29,6 +29,13 @@ export class RowGatePolicyError extends RowGateError {
   }
 }
 
+export class RowGateNotSupportedError extends RowGateError {
+  constructor(message: string, meta?: Record<string, unknown>) {
+    super(message, "ROWGATE_NOT_SUPPORTED_ERROR", meta);
+    this.name = "RowGateNotSupportedError";
+  }
+}
+
 export class RowGateAdapterError extends RowGateError {
   constructor(message: string, meta?: Record<string, unknown>) {
     super(message, "ROWGATE_ADAPTER_ERROR", meta);
