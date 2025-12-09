@@ -157,26 +157,28 @@ export function kyselyAdapter<DB>(
          * MANUAL TRANSACTIONS via startTransaction()
          */
         if (prop === "startTransaction" && typeof val === "function") {
+          // `val` is db.startTransaction
           return (...args: any[]) => {
+            // This is a ControlledTransactionBuilder
             const txBuilder = val.apply(target, args) as any;
 
-            const wrappedTxBuilder = new Proxy(txBuilder, {
+            return new Proxy(txBuilder, {
               get(txTarget, txProp, txReceiver) {
                 const original = Reflect.get(txTarget, txProp, txReceiver);
 
-                if (
-                  EXEC_METHODS.includes(txProp as string) &&
-                  typeof original === "function"
-                ) {
+                // Only `execute()` matters on the builder
+                if (txProp === "execute" && typeof original === "function") {
                   return async (...execArgs: any[]) => {
+                    // Run any pre-execute hooks that were collected on the db
                     for (const cb of _preExecute) {
                       await cb();
                     }
 
-                    // Start the real transaction
+                    // Get the raw ControlledTransaction from Kysely
                     const rawTrx = await original.apply(txTarget, execArgs);
 
-                    // Wrap the transaction connection so policies apply inside it
+                    // IMPORTANT: wrap the transaction connection itself
+                    // so that all queries inside trx go through RowGate.
                     const gatedTrx = applyProxy(rawTrx, policy, []);
 
                     return gatedTrx;
@@ -190,8 +192,46 @@ export function kyselyAdapter<DB>(
                 return original;
               },
             });
+          };
+        }
+        /**
+         * SAVEPOINTS
+         */
+        if (prop === "savepoint" && typeof val === "function") {
+          // `val` is trx.savepoint
+          return (...args: any[]) => {
+            // This is a builder with .execute() that returns a (sub)transaction
+            const txBuilder = val.apply(target, args) as any;
 
-            return wrappedTxBuilder;
+            return new Proxy(txBuilder, {
+              get(txTarget, txProp, txReceiver) {
+                const original = Reflect.get(txTarget, txProp, txReceiver);
+
+                // Intercept the builder's execute()
+                if (txProp === "execute" && typeof original === "function") {
+                  return async (...execArgs: any[]) => {
+                    // Run any pre-execute hooks attached to the *outer* trx/db
+                    for (const cb of _preExecute) {
+                      await cb();
+                    }
+
+                    // Get the raw (sub)transaction from Kysely
+                    const rawTrx = await original.apply(txTarget, execArgs);
+
+                    // Gate the savepoint transaction as well
+                    const gatedTrx = applyProxy(rawTrx, policy, []);
+
+                    return gatedTrx;
+                  };
+                }
+
+                if (typeof original === "function") {
+                  return original.bind(txTarget);
+                }
+
+                return original;
+              },
+            });
           };
         }
 
