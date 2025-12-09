@@ -13,6 +13,7 @@ import {
   DeleteQueryBuilder,
 } from "kysely";
 import { parsePossibleTableAlias } from "./helpers/table-alias";
+import { assertNoSqlFragments } from "./helpers/raw-sql";
 
 const EXEC_METHODS = [
   "execute",
@@ -66,6 +67,7 @@ export function kyselyAdapter<DB>(
         if (prop === "then") return undefined;
         if (prop === Symbol.for("nodejs.util.inspect.custom"))
           return () => "[Kysely Rowgate Adapter]";
+
         /**
          * SUBQUERIES INSIDE .select((eb) => [...])
          *
@@ -76,16 +78,19 @@ export function kyselyAdapter<DB>(
          */
         if (prop === "select" && typeof val === "function") {
           return (...args: any[]) => {
+            assertNoSqlFragments(args);
+
             // Function-style select: `.select((eb) => [...])`
             if (typeof args[0] === "function") {
               const userCb = args[0] as (eb: any) => any;
 
               const wrappedCb = (eb: any) => {
                 // IMPORTANT: reuse applyProxy on the ExpressionBuilder.
-                // This means eb.selectFrom(...) will hit the *same*
-                // selectFrom handler defined below, with all the policy logic.
                 const proxiedEb = applyProxy(eb, policy, _preExecute);
-                return userCb(proxiedEb);
+                const result = userCb(proxiedEb);
+                // Ensure no sql fragments are returned from the callback either
+                assertNoSqlFragments([result]);
+                return result;
               };
 
               const qb = val.call(
@@ -94,7 +99,7 @@ export function kyselyAdapter<DB>(
                 ...args.slice(1),
               ) as SelectQueryBuilder<DB, any, any>;
 
-              // And of course, proxy the resulting query builder as well.
+              // Proxy the resulting query builder as well.
               return applyProxy(qb, policy, _preExecute);
             }
 
@@ -114,6 +119,8 @@ export function kyselyAdapter<DB>(
         if (prop === "transaction" && typeof val === "function") {
           // `val` is the original db.transaction method
           return (...args: any[]) => {
+            assertNoSqlFragments(args);
+
             // Get the original TransactionBuilder from Kysely
             const txBuilder = val.apply(target, args) as any;
 
@@ -159,6 +166,8 @@ export function kyselyAdapter<DB>(
         if (prop === "startTransaction" && typeof val === "function") {
           // `val` is db.startTransaction
           return (...args: any[]) => {
+            assertNoSqlFragments(args);
+
             // This is a ControlledTransactionBuilder
             const txBuilder = val.apply(target, args) as any;
 
@@ -169,6 +178,8 @@ export function kyselyAdapter<DB>(
                 // Only `execute()` matters on the builder
                 if (txProp === "execute" && typeof original === "function") {
                   return async (...execArgs: any[]) => {
+                    assertNoSqlFragments(execArgs);
+
                     // Run any pre-execute hooks that were collected on the db
                     for (const cb of _preExecute) {
                       await cb();
@@ -194,12 +205,15 @@ export function kyselyAdapter<DB>(
             });
           };
         }
+
         /**
          * SAVEPOINTS
          */
         if (prop === "savepoint" && typeof val === "function") {
           // `val` is trx.savepoint
           return (...args: any[]) => {
+            assertNoSqlFragments(args);
+
             // This is a builder with .execute() that returns a (sub)transaction
             const txBuilder = val.apply(target, args) as any;
 
@@ -210,6 +224,8 @@ export function kyselyAdapter<DB>(
                 // Intercept the builder's execute()
                 if (txProp === "execute" && typeof original === "function") {
                   return async (...execArgs: any[]) => {
+                    assertNoSqlFragments(execArgs);
+
                     // Run any pre-execute hooks attached to the *outer* trx/db
                     for (const cb of _preExecute) {
                       await cb();
@@ -242,6 +258,8 @@ export function kyselyAdapter<DB>(
           return <TB extends TableNameOf<DB>>(
             table: TB | TB[],
           ): SelectQueryBuilder<DB, TB, any> => {
+            assertNoSqlFragments([table]);
+
             const qb = val.call(target, table) as SelectQueryBuilder<
               DB,
               TB,
@@ -273,6 +291,8 @@ export function kyselyAdapter<DB>(
          */
         if (prop === "with" && typeof val === "function") {
           return (...args: any[]) => {
+            assertNoSqlFragments(args);
+
             if (typeof args[1] === "function") {
               const originalFactory = args[1];
 
@@ -280,12 +300,14 @@ export function kyselyAdapter<DB>(
                 // ensure anything the user does inside the factory is also gated
                 const proxiedQb = applyProxy(qb, policy, _preExecute);
                 const expression = originalFactory(proxiedQb);
+                assertNoSqlFragments([expression]);
                 return expression;
               };
             }
 
             const result = val.apply(target, args);
-            return result;
+            // Make sure the resulting query builder is still gated
+            return applyProxy(result, policy, _preExecute);
           };
         }
 
@@ -298,6 +320,8 @@ export function kyselyAdapter<DB>(
           return <TB extends TableNameOf<DB>>(
             t: TB,
           ): InsertQueryBuilder<DB, TB, any> => {
+            assertNoSqlFragments([t]);
+
             const qb = val.call(target, t) as InsertQueryBuilder<DB, TB, any>;
             const { table } = parsePossibleTableAlias(t);
 
@@ -327,6 +351,8 @@ export function kyselyAdapter<DB>(
 
                 if (qbProp === "values" && typeof original === "function") {
                   return (values: any) => {
+                    assertNoSqlFragments([values]);
+
                     const nextQb = original.call(qbTarget, values);
                     return applyProxy(nextQb, policy, [
                       ..._preExecute,
@@ -363,6 +389,8 @@ export function kyselyAdapter<DB>(
           return <TB extends TableNameOf<DB>>(
             table: TB | TB[],
           ): DeleteQueryBuilder<DB, TB, any> => {
+            assertNoSqlFragments([table]);
+
             const qb = val.call(target, table) as DeleteQueryBuilder<
               DB,
               TB,
@@ -400,6 +428,8 @@ export function kyselyAdapter<DB>(
           return <TB extends TableNameOf<DB>>(
             t: TB,
           ): SelectQueryBuilder<DB, TB, any> => {
+            assertNoSqlFragments([t]);
+
             const qb = val.call(target, t) as SelectQueryBuilder<DB, TB, any>;
             const { table, runtimeTable } = parsePossibleTableAlias(t);
 
@@ -424,6 +454,8 @@ export function kyselyAdapter<DB>(
 
                 if (qbProp === "set" && typeof original === "function") {
                   return (values: any) => {
+                    assertNoSqlFragments([values]);
+
                     const nextQb = original.call(qbTarget, values);
 
                     return applyProxy(nextQb, policy, [
@@ -472,6 +504,8 @@ export function kyselyAdapter<DB>(
           return <TB extends TableNameOf<DB>>(
             ...args: any[]
           ): SelectQueryBuilder<DB, TB, any> => {
+            assertNoSqlFragments(args);
+
             const qb = val.call(target, ...args) as SelectQueryBuilder<
               DB,
               TB,
@@ -497,6 +531,8 @@ export function kyselyAdapter<DB>(
 
         if (EXEC_METHODS.includes(prop as string)) {
           return async (...args: any[]) => {
+            assertNoSqlFragments(args);
+
             for (const cb of _preExecute) {
               await cb();
             }
@@ -506,6 +542,8 @@ export function kyselyAdapter<DB>(
 
         if (typeof val === "function") {
           return (...args: any[]) => {
+            assertNoSqlFragments(args);
+
             const result = val.call(target, ...args) as any;
 
             // If the result is a Promise or promise-like, return it directly.
