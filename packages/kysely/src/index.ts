@@ -46,42 +46,10 @@ export function kyselyAdapter<DB>(
   // At runtime Kysely doesn't expose schema, so this is type-only.
   const tableNames = [] as TableNameOf<DB>[];
 
-  const wrapExecute = <T extends object>(
-    builder: T,
-    beforeExecute: (method: string, args: any[]) => Promise<void> | void,
-  ) =>
-    new Proxy(builder as any, {
-      get(target, prop, receiver) {
-        const val = Reflect.get(target, prop, receiver);
-        if (typeof val !== "function") return val;
-
-        // Intercept common execution methods to run checks
-        const EXEC_METHODS = [
-          "execute",
-          "executeTakeFirst",
-          "executeTakeFirstOrThrow",
-          "run",
-          "stream",
-        ];
-
-        if (EXEC_METHODS.includes(prop as string)) {
-          return async (...args: any[]) => {
-            await beforeExecute(prop as string, args);
-            return val.apply(target, args);
-          };
-        } else {
-          return (...args: any[]) => {
-            const qb = val.call(target, ...args) as any;
-            return wrapExecute(qb, beforeExecute);
-          };
-        }
-      },
-    });
-
   const applyProxy = (
     raw: any,
     policy: Policy<TableNameOf<DB>, PolicyFilter<DB>, PolicyCheck<DB>>,
-    _validate: (ctx: any) => Promise<any>,
+    _preExecute: (() => Promise<void> | void)[],
   ) => {
     return new Proxy(raw as any, {
       get(target, prop, receiver) {
@@ -109,7 +77,7 @@ export function kyselyAdapter<DB>(
                 // IMPORTANT: reuse applyProxy on the ExpressionBuilder.
                 // This means eb.selectFrom(...) will hit the *same*
                 // selectFrom handler defined below, with all the policy logic.
-                const proxiedEb = applyProxy(eb, policy, _validate);
+                const proxiedEb = applyProxy(eb, policy, _preExecute);
                 return userCb(proxiedEb);
               };
 
@@ -120,7 +88,7 @@ export function kyselyAdapter<DB>(
               ) as SelectQueryBuilder<DB, any, any>;
 
               // And of course, proxy the resulting query builder as well.
-              return applyProxy(qb, policy, _validate);
+              return applyProxy(qb, policy, _preExecute);
             }
 
             // Non-callback `.select(...)` → just proxy the resulting QB.
@@ -129,7 +97,7 @@ export function kyselyAdapter<DB>(
               any,
               any
             >;
-            return applyProxy(qb, policy, _validate);
+            return applyProxy(qb, policy, _preExecute);
           };
         }
 
@@ -160,7 +128,7 @@ export function kyselyAdapter<DB>(
               }
             }
 
-            return applyProxy(qbRes, policy, _validate);
+            return applyProxy(qbRes, policy, _preExecute);
           };
         }
 
@@ -176,9 +144,9 @@ export function kyselyAdapter<DB>(
 
               args[1] = (qb: any) => {
                 // ensure anything the user does inside the factory is also gated
-                const proxiedQb = applyProxy(qb, policy, _validate);
+                const proxiedQb = applyProxy(qb, policy, _preExecute);
                 const expression = originalFactory(proxiedQb);
-                return applyProxy(expression, policy, _validate);
+                return expression;
               };
             }
 
@@ -202,14 +170,14 @@ export function kyselyAdapter<DB>(
             const tablePolicy = policy[table];
             if (!tablePolicy) {
               // No policy for this table → just proxy normally.
-              return applyProxy(qb, policy, _validate);
+              return applyProxy(qb, policy, _preExecute);
             }
 
             const check = tablePolicy.insert?.check;
 
             if (!check) {
               // No check defined → normal behavior.
-              return applyProxy(qb, policy, _validate);
+              return applyProxy(qb, policy, _preExecute);
             }
 
             // Wrap the builder to hook `.values(...)`
@@ -226,16 +194,19 @@ export function kyselyAdapter<DB>(
                 if (qbProp === "values" && typeof original === "function") {
                   return (values: any) => {
                     const nextQb = original.call(qbTarget, values);
-                    return wrapExecute(nextQb, async () => {
-                      try {
-                        const checkRes = await check(raw, values);
-                        if (!checkRes) throw new Error();
-                      } catch {
-                        throw new RowGatePolicyError(
-                          `Policy check failed for "${table}"`,
-                        );
-                      }
-                    });
+                    return applyProxy(nextQb, policy, [
+                      ..._preExecute,
+                      async () => {
+                        const rows = Array.isArray(values) ? values : [values];
+                        for (const row of rows) {
+                          const ok = await check(db, row);
+                          if (!ok)
+                            throw new RowGatePolicyError(
+                              `Policy check failed for "${table}"`,
+                            );
+                        }
+                      },
+                    ]);
                   };
                 }
 
@@ -281,7 +252,7 @@ export function kyselyAdapter<DB>(
               qbRes = filter(qbRes as any, runtimeTable) as any;
             }
 
-            return applyProxy(qbRes, policy, _validate);
+            return applyProxy(qbRes, policy, _preExecute);
           };
         }
 
@@ -300,7 +271,7 @@ export function kyselyAdapter<DB>(
 
             const tablePolicy = policy[table];
             if (!tablePolicy) {
-              return applyProxy(qb, policy, _validate);
+              return applyProxy(qb, policy, _preExecute);
             }
 
             const filter = tablePolicy.update?.filter ?? undefined;
@@ -309,7 +280,7 @@ export function kyselyAdapter<DB>(
             const filteredQb = filter ? filter(qb, runtimeTable) : qb;
 
             if (!check) {
-              return applyProxy(filteredQb, policy, _validate);
+              return applyProxy(filteredQb, policy, _preExecute);
             }
 
             // Wrap to hook `.set(...)`
@@ -320,16 +291,17 @@ export function kyselyAdapter<DB>(
                 if (qbProp === "set" && typeof original === "function") {
                   return (values: any) => {
                     const nextQb = original.call(qbTarget, values);
-                    return wrapExecute(nextQb, async () => {
-                      try {
-                        const checkRes = await check(raw, values);
-                        if (!checkRes) throw new Error();
-                      } catch {
-                        throw new RowGatePolicyError(
-                          `Policy check failed for "${table}"`,
-                        );
-                      }
-                    });
+
+                    return applyProxy(nextQb, policy, [
+                      ..._preExecute,
+                      async () => {
+                        const ok = await check(db, values);
+                        if (!ok)
+                          throw new RowGatePolicyError(
+                            `Policy check failed for "${table}"`,
+                          );
+                      },
+                    ]);
                   };
                 }
 
@@ -377,7 +349,7 @@ export function kyselyAdapter<DB>(
 
             const tablePolicy = policy[table];
             if (!tablePolicy) {
-              return applyProxy(qb, policy, _validate);
+              return applyProxy(qb, policy, _preExecute);
             }
 
             const filter = tablePolicy.select?.filter ?? undefined;
@@ -385,7 +357,24 @@ export function kyselyAdapter<DB>(
             const qbRes = filter
               ? (filter(qb as any, runtimeTable) as any)
               : qb;
-            return applyProxy(qbRes, policy, _validate);
+            return applyProxy(qbRes, policy, _preExecute);
+          };
+        }
+
+        const EXEC_METHODS = [
+          "execute",
+          "executeTakeFirst",
+          "executeTakeFirstOrThrow",
+          "run",
+          "stream",
+        ];
+
+        if (EXEC_METHODS.includes(prop as string)) {
+          return async (...args: any[]) => {
+            for (const cb of _preExecute) {
+              await cb();
+            }
+            return val.apply(target, args);
           };
         }
 
@@ -401,7 +390,7 @@ export function kyselyAdapter<DB>(
             }
 
             // Otherwise, wrap the query builder result in applyProxy
-            return applyProxy(result, policy, _validate);
+            return applyProxy(result, policy, _preExecute);
           };
         }
 
@@ -413,7 +402,13 @@ export function kyselyAdapter<DB>(
   return {
     name: "kysely",
     raw: db,
-    applyProxy,
+    applyProxy: (raw, policy, validate) => {
+      return applyProxy(raw, policy, [
+        async () => {
+          await validate();
+        },
+      ]);
+    },
     tableNames,
   };
 }

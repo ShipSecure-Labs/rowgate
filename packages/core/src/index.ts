@@ -14,7 +14,7 @@ export type Adapter<
   applyProxy?: (
     raw: RawAdapter,
     policy: Policy<Table, PolicyFilter, PolicyCheck>,
-    validate: (ctx: any) => Promise<any>,
+    validate: () => Promise<any>,
   ) => RawAdapter;
 };
 
@@ -62,7 +62,7 @@ export function withRowgate<
       return options.adapter.applyProxy(
         options.adapter.raw,
         options.policy(ctx),
-        async (ctx: any) => {
+        async () => {
           return await standardValidate(options.context, ctx);
         },
       );
