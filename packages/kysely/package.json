@@ -17,6 +17,26 @@
     "url": "git+https://github.com/ShipSecure-Labs/rowgate.git"
   },
   "homepage": "https://rowgate.com/docs",
+  "keywords": [
+    "rowgate",
+    "row-level-security",
+    "rls",
+    "authorization",
+    "access-control",
+    "security",
+    "database",
+    "sql",
+    "mysql",
+    "postgres",
+    "postgresql",
+    "sqlite",
+    "kysely",
+    "typescript",
+    "nodejs",
+    "orm",
+    "multi-tenant",
+    "rbac"
+  ],
   "exports": {
     ".": {
       "import": {
