@@ -31,8 +31,6 @@ Adapters are installed separately:
 
 ```sh
 pnpm add @rowgate/kysely
-# or
-pnpm add @rowgate/prisma
 ```
 
 You can also install the adapter directly - they have `@rowgate/core` as a dependency.
