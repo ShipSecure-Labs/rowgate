@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Adapter, Policy } from "@rowgate/core";
 export { withRowgate } from "@rowgate/core";
-import { PrismaClient } from "@prisma/client";
+
+type PrismaClient = any;
 
 const ATTACH_METHODS = [
   "findFirst",
