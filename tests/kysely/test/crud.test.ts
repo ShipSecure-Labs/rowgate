@@ -6,7 +6,7 @@ import {
   resetDatabase,
   DB,
 } from "./helpers/test-db-mysql";
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 import { jsonArrayFrom, jsonObjectFrom } from "kysely/helpers/mysql";
 import { RowGateNotSupportedError, RowGatePolicyError } from "@rowgate/core";
 
@@ -338,9 +338,13 @@ describe("RowGate Kysely adapter - Post policy (MySQL)", () => {
       })
       .execute();
 
+    const dbName = await sql<{ db: string }>`select database() as db;`.execute(
+      db.ungated(),
+    );
+
     const postsUser1 = await db
       .gated("2")
-      .withSchema("rowgate_test")
+      .withSchema(dbName.rows[0]?.db)
       .selectFrom("Post")
       .select(["Post.id", "Post.authorId"])
       .execute();
