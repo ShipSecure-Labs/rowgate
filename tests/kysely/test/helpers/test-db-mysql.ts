@@ -1,9 +1,10 @@
-import { Kysely, MysqlDialect } from "kysely";
-import { createPool } from "mysql2";
+import { Kysely, MysqlDialect, sql } from "kysely";
+import { createPool, type Pool } from "mysql2";
+import { createPool as createPoolPromise, type Pool } from "mysql2/promise";
 import { withRowgate, kyselyAdapter } from "@rowgate/kysely";
 import { z } from "zod";
+import { randomBytes } from "crypto";
 
-// If you already export DB type from your library, import that instead.
 interface UserTable {
   id: string;
   email: string;
@@ -23,28 +24,72 @@ export interface DB {
   Post: PostTable;
 }
 
-export async function createKyselyInstance() {
+const baseMysqlConfig = {
+  host: process.env.MYSQL_HOST || "127.0.0.1",
+  port: Number(process.env.MYSQL_PORT || "3307"),
+  user: process.env.MYSQL_USER || "root",
+  password: process.env.MYSQL_PASSWORD || "rowgate",
+  waitForConnections: true,
+  connectionLimit: 50,
+  ssl: {
+    rejectUnauthorized: false,
+  },
+};
+
+/**
+ * Creates a new empty database using an admin connection (no DB selected).
+ */
+async function createDatabase(dbName: string) {
+  const adminPool = createPoolPromise(baseMysqlConfig);
+  const conn = await adminPool.getConnection();
+  try {
+    await conn.query(`CREATE DATABASE \`${dbName}\``);
+  } finally {
+    conn.release();
+    await adminPool.end();
+  }
+}
+
+/**
+ * Drops a database using an admin connection.
+ * Handy for test cleanup.
+ */
+export async function dropDatabase(dbName: string) {
+  const adminPool = createPoolPromise(baseMysqlConfig);
+  const conn = await adminPool.getConnection();
+  try {
+    await conn.query(`DROP DATABASE IF EXISTS \`${dbName}\``);
+  } finally {
+    conn.release();
+    await adminPool.end();
+  }
+}
+
+export async function createKyselyInstance(): Promise<{
+  db: Kysely<DB>;
+  dbName: string;
+  pool: Pool;
+}> {
+  const dbName = "rowgate_test_" + randomBytes(6).toString("hex");
+
+  // 1) actually create the DB
+  await createDatabase(dbName);
+
+  console.log("Created DB", dbName);
+
+  // 2) connect to the newly created DB
   const pool = createPool({
-    host: process.env.MYSQL_HOST || "127.0.0.1",
-    port: Number(process.env.MYSQL_PORT || "3307"),
-    user: process.env.MYSQL_USER || "rowgate",
-    password: process.env.MYSQL_PASSWORD || "rowgate",
-    database: process.env.MYSQL_DATABASE || "rowgate_test",
-    waitForConnections: true,
-    connectionLimit: 10,
-    ssl: {
-      rejectUnauthorized: false,
-    },
+    ...baseMysqlConfig,
+    database: dbName,
   });
+
   const dialect = new MysqlDialect({
     pool: async () => pool,
   });
 
-  const db = new Kysely<DB>({
-    dialect,
-  });
+  const db = new Kysely<DB>({ dialect });
 
-  return { db };
+  return { db, dbName, pool };
 }
 
 export async function migrate(rawDb: Kysely<DB>) {
@@ -113,4 +158,17 @@ export async function resetDatabase(rawDb: Kysely<DB>) {
   // Order matters because of FK-like relationships
   await rawDb.deleteFrom("Post").execute();
   await rawDb.deleteFrom("User").execute();
+}
+
+/**
+ * Optional convenience: close everything for a test DB.
+ */
+export async function destroyTestDb(
+  db: Kysely<DB>,
+  pool: Pool,
+  dbName: string,
+) {
+  await db.destroy();
+  await pool.end();
+  await dropDatabase(dbName);
 }
