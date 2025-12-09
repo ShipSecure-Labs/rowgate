@@ -11,6 +11,10 @@
     "noEmit": true,
     "declarationMap": true,
     "isolatedDeclarations": true,
-    "types": ["vitest/globals"]
+    "types": ["vitest/globals"],
+    "paths": {
+      "@rowgate/core": ["./packages/core/src"],
+      "@rowgate/kysely": ["./packages/kysely/src"]
+    }
   }
 }
